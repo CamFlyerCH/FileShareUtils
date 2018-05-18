@@ -548,7 +548,7 @@ Function Get-NetShares{
                 1.0 //First version 10.05.2018
 
         .OUTPUT
-            Object with .......
+            Array of objects with share informations
 
 
         .EXAMPLE
