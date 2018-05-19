@@ -1,3 +1,7 @@
+# PowerShell Module FileShareUtils from Jean-Marc Ulrich
+# https://github.com/CamFlyerCH/FileShareUtils
+
+# Code to access the netapi32 and advapi32 functions
 Add-Type -TypeDefinition @" 
 using System; 
 using System.Runtime.InteropServices;
@@ -547,10 +551,6 @@ Function Get-NetShares{
             Version History:
                 1.0 //First version 10.05.2018
 
-        .OUTPUT
-            Array of objects with share informations
-
-
         .EXAMPLE
             Get-NetShares -Server 'srv1234'
 
@@ -667,7 +667,7 @@ Function Get-NetShare{
     Param (
         [Parameter(Position=0,Mandatory=$True,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
         [Alias('Name')]
-        [string]$SpecifiedName,
+        [string]$Name,
 
         [Parameter(Position=1,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
         [string]$Server = ($env:computername).toLower()
@@ -676,18 +676,18 @@ Function Get-NetShare{
         # We want to query the 502 data first
         $bufptr = [IntPtr]::Zero
         $struct = New-Object Netapi+SHARE_INFO_502
-        $return = [Netapi]::NetShareGetInfo($Server,$SpecifiedName,502,[ref]$bufptr)
+        $return = [Netapi]::NetShareGetInfo($Server,$Name,502,[ref]$bufptr)
 
         If($return -eq 0){
             $str502 = [System.Runtime.InteropServices.Marshal]::PtrToStructure($bufptr,[System.Type]$struct.GetType())
         } Else {
-            Throw ("Error during NetShareGetInfo for $SpecifiedName : " + (NetAPIReturnHelp $return))
+            Throw ("Error during NetShareGetInfo for $Name : " + (NetAPIReturnHelp $return))
         }
 
         # Now read the flags
         $bufptr = [IntPtr]::Zero
         $struct = New-Object Netapi+SHARE_INFO_1005
-        $return = [Netapi]::NetShareGetInfo($Server,$SpecifiedName,1005,[ref]$bufptr)
+        $return = [Netapi]::NetShareGetInfo($Server,$Name,1005,[ref]$bufptr)
 
         If($return -eq 0){
             $str1005 = [System.Runtime.InteropServices.Marshal]::PtrToStructure($bufptr,[System.Type]$struct.GetType())
@@ -781,10 +781,6 @@ Function Get-NetFileShares{
             Version History:
                 1.0 //First version 10.05.2018
 
-        .OUTPUT
-            Object with .......
-
-
         .EXAMPLE
             Get-NetFileShares -Server 'srv1234'
 
@@ -843,7 +839,7 @@ Function New-NetShare{
             Offline Folder configuration, can be Manual (default), "None", "Documents" (all documents are automaticaly offline available), "Programs" ("Performance option", all files are automaticaly offline available)
 
         .PARAMETER MaxUses
-            Allowed connections to the share. Default is -1 that equals Maximum
+            Allowed connections to the share. Default is -1 that equals maximum
 
 
         .NOTES
@@ -851,10 +847,6 @@ Function New-NetShare{
             Author: Jean-Marc Ulrich
             Version History:
                 1.0 //First version 17.05.2018
-
-        .OUTPUT
-            Nothing
-
 
         .EXAMPLE
             New-NetShare -Server 'srv1234' -Name 'TestShare' -Path 'D:\Data'
@@ -913,7 +905,7 @@ Function New-NetShare{
             Throw ("Error during NetShareAdd: " + (NetAPIReturnHelp $return))
         }
 
-        Set-NetShare -Server $Server -Name $Name -Description $Description -Permissions $Permissions -ABE $ABE -CachingMode $CachingMode -MaxUses $MaxUses
+        $return = Set-NetShare -Server $Server -Name $Name -Description $Description -Permissions $Permissions -ABE $ABE -CachingMode $CachingMode -MaxUses $MaxUses
 
     }
 }
@@ -924,7 +916,7 @@ Function Set-NetShare{
             Changes options on a network file share local or on a remote computer
 
         .DESCRIPTION
-            Can modify all changeabla options of a file share local or on a remote computer
+            Can modify all changeable options of a file share local or on a remote computer
             by using the NetAPI32.dll (without WMI)
 
         .PARAMETER Server
@@ -949,17 +941,13 @@ Function Set-NetShare{
             Offline Folder configuration, can be Manual (default), "None", "Documents" (all documents are automaticaly offline available), "Programs" ("Performance option", all files are automaticaly offline available)
 
         .PARAMETER MaxUses
-            Allowed connections to the share. Default is -1 that equals Maximum
+            Allowed connections to the share. Default is -1 that equals maximum
 
         .NOTES
             Name: Set-NetShare
             Author: Jean-Marc Ulrich
             Version History:
                 1.0 //First version 17.05.2018
-
-        .OUTPUT
-            Nothing
-
 
         .EXAMPLE
             New-NetShare -Server 'srv1234' -Name 'TestShare' -Description "A test share" -ABE Enabled -CachingMode None -MaxUses 50 -Permissions "DOMAINNAME\Domain Admins|FullControl,Everyone|Change,BUILTIN\Administrators|FullControl"
@@ -1147,10 +1135,6 @@ Function Remove-NetShare{
             Version History:
                 1.0 //First version 18.05.2018
 
-        .OUTPUT
-            Nothing
-
-
         .EXAMPLE
             Remove-NetShare -Server 'srv1234' -Name 'TestShare'
 
@@ -1195,8 +1179,7 @@ Function Get-NetSessions{
             Version History:
                 1.0 //First version 11.05.2018
 
-        .OUTPUT
-            Array of objects with Username,Client,Opens (open files),TimeTS (as timespan),Time (as string),Connected (as DateTime),IdleTS (as timespan),Idle (as string),IdleSince (as DateTime),ConnectionType
+            OUTPUT : Array of objects with Username,Client,Opens (open files),TimeTS (as timespan),Time (as string),Connected (as DateTime),IdleTS (as timespan),Idle (as string),IdleSince (as DateTime),ConnectionType
 
 
         .EXAMPLE
@@ -1300,8 +1283,7 @@ Function Get-NetOpenFiles{
             Version History:
                 1.0 //First version 11.05.2018
 
-        .OUTPUT
-            Array of objects with Username,Client,Opens (open files),TimeTS (as timespan),Time (as string),Connected (as DateTime),IdleTS (as timespan),Idle (as string),IdleSince (as DateTime),ConnectionType
+            OUTPUT : Array of objects with Username,Client,Opens (open files),TimeTS (as timespan),Time (as string),Connected (as DateTime),IdleTS (as timespan),Idle (as string),IdleSince (as DateTime),ConnectionType
 
 
         .EXAMPLE
@@ -1370,40 +1352,4 @@ Function Get-NetOpenFiles{
 	    $Files = $Files | Sort-Object Path,User
         $Files
     }
-}
-
-Function Get-NetStatistics
-{
-	[CmdletBinding()]
-	param ( [Parameter(Position=0)][string]$server = "localhost", 
-			[Parameter(Position=1)][string]$type="WORKSTATION")
-
-	if ($type -eq "SERVER")
-	{
-		$struct = New-Object netapi+STAT_SERVER_0 
-		$service = "LanmanServer"
-	}
-	else
-	{
-		$struct = New-Object netapi+STAT_WORKSTATION_0 
-		$service = "LanmanWorkstation"
-	}
-
-	$buffer = 0
-	$ret = [Netapi]::NetStatisticsGet($server,
-									  $service,
-									  0, # only level 0 is supported for now
-									  0, #must be 0
-								  	  [ref]$buffer)
-
-	if (!$ret)
-	{
-	    $ret = [system.runtime.interopservices.marshal]::PtrToStructure($buffer, [System.Type]$struct.GetType())
-		$ret
-	}
-	else
-	{
-		Write-Output ([ComponentModel.Win32Exception][Int32]$ret).Message
-	}
-
 }
