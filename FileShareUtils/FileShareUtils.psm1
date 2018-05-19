@@ -908,9 +908,6 @@ Function New-NetShare{
 
         $return = Set-NetShare -Server $Server -Name $Name -Description $Description -Permissions $Permissions -ABE $ABE -CachingMode $CachingMode -MaxUses $MaxUses
 
-        # Cleanup memory
-        [Netapi]::NetApiBufferFree($bufptr) | Out-Null
-
     }
 }
 
