@@ -82,8 +82,8 @@ The folowing parameters are available:
 Property | Description
 ---------|----------
 Server | The machine hosting the share, default is the local machine
-* Name | The name of the share
-* Path | The local path to be shared
+**&#42; Name** | The name of the share
+**&#42; Path** | The local path to be shared
 Description | The remark or description of the share
 Permissions | The share permissions to set on the share itself. Speical format: Every permission is seperated by a comma and the identity and the access right are seperated by a &#124; _(pipe)_ <br/>Default: Everyone&#124;FullControl<br/>Possible Permissions: Read, Change, FullControl, Deny-FullControl<br/>Possible Identities: Everyone, BUILTIN\Administrators, BUILTIN\Users, BUILTIN\xxxxx (server local users or groups), DOMAIN\UserName, ADCORP\GroupName, \<NETBIOSDOMAINNAME>\\\<sAMAccountName> (domain objects)
 ABE | Access based enumaration, can be Enabled or Disabled (default)
@@ -103,7 +103,7 @@ The folowing parameters are available:
 Property | Description
 ---------|----------
 Server | The machine hosting the share, default is the local machine
-* Name | The name of the share
+**&#42; Name** | The name of the share
 Description | The remark or description of the share
 Permissions | The share permissions to set on the share itself. Speical format: Every permission is seperated by a comma and the identity and the access right are seperated by a &#124; _(pipe)_ <br/>Possible Permissions: Read, Change, FullControl, Deny-FullControl<br/>Possible Identities: Everyone, BUILTIN\Administrators, BUILTIN\Users, BUILTIN\xxxxx (server local users or groups), DOMAIN\UserName, ADCORP\GroupName, \<NETBIOSDOMAINNAME>\\\<sAMAccountName> (domain objects)
 ABE | Access based enumaration, can be Enabled or Disabled (default)
@@ -123,7 +123,7 @@ The folowing parameters
 Property | Description
 ---------|----------
 Server | The machine hosting the share, default is the local machine
-* Name | The name of the share
+**&#42; Name** | The name of the share
 
 
 This function returns nothing.
