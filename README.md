@@ -20,6 +20,12 @@ Install it in PowerShell like this:
 Install-Module -Name FileShareUtils
 ```
 
+To update use -Force :
+
+Install-Module FileShareUtils -Force
+
+
+
 Get more informations about the module like this:  
 Before download:
 ```
