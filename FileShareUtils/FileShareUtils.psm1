@@ -402,12 +402,12 @@ public class Netapi
 
 # Helper - Functions ===========================================================================
 
-Function NetAPIReturnHelp($CallReturn){
+Function Get-NetAPIReturnInfo($CallReturn){
     ([ComponentModel.Win32Exception][Int32]$CallReturn).Message
     #net helpmsg $CallReturn
 }
 
-Function ReverseLookup{
+Function Get-DNSGet-DNSReverseLookup{
     Param(
         [Parameter(Position=0,Mandatory=$True,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
         [string]$IP
@@ -418,7 +418,7 @@ Function ReverseLookup{
     }
 }
 
-Function ShareACLToText($ShareACL,$SortACL){
+Function Convert-ShareACLToText($ShareACL,$SortACL){
     #Seperators in the String
     $InACLseperator = ","
     $InACEseperator = "|"
@@ -447,7 +447,7 @@ Function ShareACLToText($ShareACL,$SortACL){
     $Return
 }
 
-Function ACLTextToShareACL($UnsortedACLText){
+Function Convert-ACLTextToShareACL($UnsortedACLText){
     #Seperators in the String
     $InACLseperator = ","
     $InACEseperator = "|"
@@ -482,7 +482,7 @@ Function ACLTextToShareACL($UnsortedACLText){
     $NewACLObject
 }
 
-Function SDtoSDDL($ptr2SD,$SECURITY_INFORMATION){
+Function Convert-SDtoSDDL($ptr2SD,$SECURITY_INFORMATION){
     #OWNER_SECURITY_INFORMATION	1	der Eigentümer wird konvertiert
     #GROUP_SECURITY_INFORMATION	2	die primäre Gruppe wird konvertiert
     #DACL_SECURITY_INFORMATION	4	die DACL Zugriffskontrollliste wird konvertiert
@@ -498,7 +498,7 @@ Function SDtoSDDL($ptr2SD,$SECURITY_INFORMATION){
     $sddllength = [IntPtr]::Zero
 	$return = [Netapi]::ConvertSecurityDescriptorToStringSecurityDescriptor($ptr2SD,$SDDL_REVISION_1,$SECURITY_INFORMATION,[ref]$sddlptr,[ref]$sddllength)
     If($return -ne $True){
-        Throw ("Error during ConvertSecurityDescriptorToStringSecurityDescriptor: " + (NetAPIReturnHelp $return))
+        Throw ("Error during ConvertSecurityDescriptorToStringSecurityDescriptor: " + (Get-NetAPIReturnInfo $return))
     }
     $sddl = [System.Runtime.Interopservices.Marshal]::PtrToStringAuto($sddlptr)
     $sddl
@@ -580,7 +580,7 @@ Function Get-NetShares{
 
         If($return -ne 0){
             Write-Output ([ComponentModel.Win32Exception][Int32]$ret).Message
-            Throw ("Error during NetShareEnum: " + (NetAPIReturnHelp $return))
+            Throw ("Error during NetShareEnum: " + (Get-NetAPIReturnInfo $return))
         }
 
 		$offset = $buffer.ToInt64()
@@ -630,6 +630,7 @@ Function Get-NetShares{
 
         $Shares | Sort-Object Path
 
+        # Cleanup memory
         [Netapi]::NetApiBufferFree($buffer) | Out-Null
     }
 }
@@ -656,10 +657,6 @@ Function Get-NetShare{
             Version History:
                 1.0 //First version 10.05.2018
 
-        .OUTPUT
-            Object with .......
-
-
         .EXAMPLE
             Get-NetShare -Name 'TestShare' -Server 'srv1234'
 
@@ -670,7 +667,6 @@ Function Get-NetShare{
 	[CmdletBinding()]
     Param (
         [Parameter(Position=0,Mandatory=$True,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
-        [Alias('Name')]
         [string]$Name,
 
         [Parameter(Position=1,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
@@ -685,7 +681,7 @@ Function Get-NetShare{
         If($return -eq 0){
             $str502 = [System.Runtime.InteropServices.Marshal]::PtrToStructure($bufptr,[System.Type]$struct.GetType())
         } Else {
-            Throw ("Error during NetShareGetInfo for $Name : " + (NetAPIReturnHelp $return))
+            Throw ("Error during NetShareGetInfo for $Name : " + (Get-NetAPIReturnInfo $return))
         }
 
         # Now read the flags
@@ -696,7 +692,7 @@ Function Get-NetShare{
         If($return -eq 0){
             $str1005 = [System.Runtime.InteropServices.Marshal]::PtrToStructure($bufptr,[System.Type]$struct.GetType())
         } Else {
-            Throw ("Error during NetShareGetInfo 1005: " + (NetAPIReturnHelp $return))
+            Throw ("Error during NetShareGetInfo 1005: " + (Get-NetAPIReturnInfo $return))
         }
 
         # Define output object
@@ -725,10 +721,10 @@ Function Get-NetShare{
 
             #$ShareACL = SDtoACL $str502.SecurityDescriptor
             #$ShareACLText = ACLArrayToACLText $ShareACL $True
-            $ShareACLSSDL = SDtoSDDL $str502.SecurityDescriptor 4 # 15 or 4
+            $ShareACLSSDL = Convert-SDtoSDDL $str502.SecurityDescriptor 4 # 15 or 4
             $ShareACL = Convert-SDDLToACL -SDDLString $ShareACLSSDL
             #$ShareACLText = $ShareACL.AccessToString
-            $ShareACLText = ShareACLToText $ShareACL $True
+            $ShareACLText = Convert-ShareACLToText $ShareACL $True
 
 	    } # EndIf SD present
 
@@ -760,6 +756,7 @@ Function Get-NetShare{
 
         $Share | Add-Member ShareACL $ShareACL
 
+        # Cleanup memory
         [Netapi]::NetApiBufferFree($bufptr) | Out-Null
 
         $Share
@@ -906,10 +903,13 @@ Function New-NetShare{
 
         If($return -ne 0){
             #Write-Output ([ComponentModel.Win32Exception][Int32]$return).Message
-            Throw ("Error during NetShareAdd: " + (NetAPIReturnHelp $return))
+            Throw ("Error during NetShareAdd: " + (Get-NetAPIReturnInfo $return))
         }
 
         $return = Set-NetShare -Server $Server -Name $Name -Description $Description -Permissions $Permissions -ABE $ABE -CachingMode $CachingMode -MaxUses $MaxUses
+
+        # Cleanup memory
+        [Netapi]::NetApiBufferFree($bufptr) | Out-Null
 
     }
 }
@@ -954,7 +954,7 @@ Function Set-NetShare{
                 1.0 //First version 17.05.2018
 
         .EXAMPLE
-            New-NetShare -Server 'srv1234' -Name 'TestShare' -Description "A test share" -ABE Enabled -CachingMode None -MaxUses 50 -Permissions "DOMAINNAME\Domain Admins|FullControl,Everyone|Change,BUILTIN\Administrators|FullControl"
+            Set-NetShare -Server 'srv1234' -Name 'TestShare' -Description "A test share" -ABE Enabled -CachingMode None -MaxUses 50 -Permissions "DOMAINNAME\Domain Admins|FullControl,Everyone|Change,BUILTIN\Administrators|FullControl"
 
             Description
             -----------
@@ -997,7 +997,7 @@ Function Set-NetShare{
         If($return -eq 0){
             $str502 = [System.Runtime.InteropServices.Marshal]::PtrToStructure($bufptr502,[System.Type]$struct502.GetType())
         } Else {
-            Throw ("Error during NetShareGetInfo for $Name on $Server : " + (NetAPIReturnHelp $return))
+            Throw ("Error during NetShareGetInfo for $Name on $Server : " + (Get-NetAPIReturnInfo $return))
         }
 
         # Now read the flags
@@ -1008,7 +1008,7 @@ Function Set-NetShare{
         If($return -eq 0){
             $str1005 = [System.Runtime.InteropServices.Marshal]::PtrToStructure($bufptr1005,[System.Type]$struct1005.GetType())
         } Else {
-            Throw ("Error during NetShareGetInfo 1005 for $Name on $Server : " + (NetAPIReturnHelp $return))
+            Throw ("Error during NetShareGetInfo 1005 for $Name on $Server : " + (Get-NetAPIReturnInfo $return))
         }
         $ShareFlags = $str1005.shi1005_flags
 
@@ -1035,14 +1035,14 @@ Function Set-NetShare{
         If($PSBoundParameters.ContainsKey('Permissions')){
             If($Permissions){
                 # Cenvert and sort given permissions
-                $NewACL = ACLTextToShareACL $Permissions
-                $NewShareACLText = ShareACLToText $NewACL $True
+                $NewACL = Convert-ACLTextToShareACL $Permissions
+                $NewShareACLText = Convert-ShareACLToText $NewACL $True
                 
                 If ($str502.SecurityDescriptor -ne 0){
 
-                    $ShareACLSSDL = SDtoSDDL $str502.SecurityDescriptor 4 # 15 or 4
+                    $ShareACLSSDL = Convert-SDtoSDDL $str502.SecurityDescriptor 4 # 15 or 4
                     $ShareACL = Convert-SDDLToACL -SDDLString $ShareACLSSDL
-                    $ShareACLText = ShareACLToText $ShareACL $True
+                    $ShareACLText = Convert-ShareACLToText $ShareACL $True
                 }
 
                 If($NewShareACLText -ne $ShareACLText){
@@ -1055,7 +1055,7 @@ Function Set-NetShare{
                     $NewSDsize = [IntPtr]::Zero
                     $return = [Netapi]::ConvertStringSecurityDescriptorToSecurityDescriptor($sddlptr,$SDDL_REVISION_1,[ref]$NewSDptr,[ref]$NewSDsize)
                     If($return -ne $True){
-                        Throw ("Error during ConvertStringSecurityDescriptorToSecurityDescriptor: " + (NetAPIReturnHelp $return))
+                        Throw ("Error during ConvertStringSecurityDescriptorToSecurityDescriptor: " + (Get-NetAPIReturnInfo $return))
                     }
 
                     $str502.SecurityDescriptor = $NewSDptr
@@ -1075,7 +1075,7 @@ Function Set-NetShare{
 
             If($return -ne 0){
                 #Write-Output ([ComponentModel.Win32Exception][Int32]$return).Message
-                Throw ("Error during NetShareSetInfo 502: " + (NetAPIReturnHelp $return))
+                Throw ("Error during NetShareSetInfo 502: " + (Get-NetAPIReturnInfo $return))
             }
         }
 
@@ -1111,9 +1111,14 @@ Function Set-NetShare{
 
             If($return -ne 0){
                 #Write-Output ([ComponentModel.Win32Exception][Int32]$return).Message
-                Throw ("Error during NetShareSetInfo 1005: " + (NetAPIReturnHelp $return))
+                Throw ("Error during NetShareSetInfo 1005: " + (Get-NetAPIReturnInfo $return))
             }
         }
+
+        # Cleanup memory
+        [Netapi]::NetApiBufferFree($bufptr502) | Out-Null
+        [Netapi]::NetApiBufferFree($bufptr1005) | Out-Null
+        [Netapi]::NetApiBufferFree($bufptr) | Out-Null
 
     }
 }
@@ -1159,7 +1164,7 @@ Function Remove-NetShare{
         $return = [Netapi]::NetShareDel($Server,$Name,$reserved)
 
         If($return -ne 0){
-            Throw ("Error during NetShareDel for $Name on $Server : " + (NetAPIReturnHelp $return))
+            Throw ("Error during NetShareDel for $Name on $Server : " + (Get-NetAPIReturnInfo $return))
         }
     }
 }
@@ -1199,21 +1204,8 @@ Function Get-NetSessions{
         [string]$Server = ($env:computername).toLower()
     )
     Begin {
-        # Not a option anymore, we read with level 502
-        #switch ($level)
-	    #{
-		#    0   { $struct = New-Object netapi+SESSION_INFO_0 }
-		#    1   { $struct = New-Object netapi+SESSION_INFO_1 }
-		#    2   { $struct = New-Object netapi+SESSION_INFO_2 }
-		#    10  { $struct = New-Object netapi+SESSION_INFO_10 }
-		#    502 { $struct = New-Object netapi+SESSION_INFO_502 }
-		#
-		#    default
-		#    {
-			    $level = 502
-			    $struct = New-Object netapi+SESSION_INFO_502
-		#    }
-	    #}
+        $level = 502
+        $struct = New-Object netapi+SESSION_INFO_502
 
 	    $buffer = 0
 	    $entries = 0
@@ -1227,7 +1219,7 @@ Function Get-NetSessions{
 
         If($return -ne 0){
             Write-Output ([ComponentModel.Win32Exception][Int32]$ret).Message
-            Throw ("Error during NetShareEnum: " + (NetAPIReturnHelp $return))
+            Throw ("Error during NetShareEnum: " + (Get-NetAPIReturnInfo $return))
         }
 
 
@@ -1243,7 +1235,7 @@ Function Get-NetSessions{
 	        $offset += $increment
 
             # Resolve hostname
-            $Clientname = ReverseLookup $Session.Name
+            $Clientname = Get-DNSGet-DNSReverseLookup $Session.Name
 
             $TimeTS = New-TimeSpan -Seconds $Session.Time
             $Time = [String]([Int]$TimeTS.TotalHours) + ":" + [String]($TimeTS.Minutes)
@@ -1260,6 +1252,7 @@ Function Get-NetSessions{
 	    $Sessions = $Sessions | Sort-Object Username,Client
         $Sessions
 
+        # Cleanup memory
         [Netapi]::NetApiBufferFree($buffer) | Out-Null
     }
 
@@ -1305,17 +1298,8 @@ Function Get-NetOpenFiles{
         [string]$Path = $Null
     )
     Begin {
-        # Not a option anymore, we read with level 3
-	    #switch ($level)
-	    #{
-		#    2   { $struct = New-Object netapi+FILE_INFO_2 }
-		#    3   { $struct = New-Object netapi+FILE_INFO_3 }
-		#    default
-		#    {
-			    $level = 3
-			    $struct = New-Object netapi+FILE_INFO_3 
-		#    }
-	    #}
+        $level = 3
+        $struct = New-Object netapi+FILE_INFO_3 
 
 	    $buffer = 0
 	    $entries = 0
@@ -1327,7 +1311,7 @@ Function Get-NetOpenFiles{
 
         If($return -ne 0){
             Write-Output ([ComponentModel.Win32Exception][Int32]$ret).Message
-            Throw ("Error during NetShareEnum: " + (NetAPIReturnHelp $return))
+            Throw ("Error during NetShareEnum: " + (Get-NetAPIReturnInfo $return))
         }
 
 		$offset = $buffer.ToInt64()
@@ -1355,5 +1339,9 @@ Function Get-NetOpenFiles{
 		}
 	    $Files = $Files | Sort-Object Path,User
         $Files
+
+        # Cleanup memory
+        [Netapi]::NetApiBufferFree($buffer) | Out-Null
+
     }
 }
