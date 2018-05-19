@@ -167,7 +167,6 @@ Lock | Active locks by this access
 
 <br/><br/>
 
-
 ## Installation
 
 ### From the PowerShell Gallery :
@@ -190,6 +189,11 @@ After installation: ``Get-InstalledModule -Name FileShareUtils | FL``
 Look at the code in ISE: 
 ``Powershell_ISE.exe ((Get-InstalledModule -Name FileShareUtils).InstalledLocation + "\FileShareUtils.psm1")``
 
+### Uninstall module installed from PowerShell Gallery
+
+Use this to uninstall all versions:
+``Uninstall-Module FileShareUtils -all``
+
 ### Manual installation :
 
 Open your module folder. Probably one of these two:  
@@ -204,13 +208,21 @@ Copy at least the two files of the module in the created folder:
 * FileShareUtils.psm1
 
 
+<br/><br/>
 
+## Credits
 
+I searched very long and intensive for the solutions now built in this module. But I found some helpfull blogs other information on the internet and I like to mention them here.
 
-Uninstall-Module FileShareUtils -all
+The first and for me important post is from Alexander from his Kazun PowerShell blog:  
+[Managing Access-based enumeration with PowerShell](https://kazunposh.wordpress.com/2011/12/11/%D1%83%D0%BF%D1%80%D0%B0%D0%B2%D0%BB%D0%B5%D0%BD%D0%B8%D0%B5-access-based-enumeration-%D1%81-%D0%BF%D0%BE%D0%BC%D0%BE%D1%89%D1%8C%D1%8E-powershell/)
 
+After testing the code above I found that using netapi32 seams to be the way to go. More search lead me to the blog of Micky Balladelli micky@balladelli.com .  
+* [Enumération de shares SMB](https://balladelli.com/enumeration-de-shares-smb/)  
+* [Netapi et Powershell](https://balladelli.com/netapi-et-powershell)  
+* [Les permissions d’un share](https://balladelli.com/les-permissions-dun-share/)
 
-
+Most important and cryptic parts to implement the netapi32 and advapi32 functions I borrowed from his code in these 3 blog posts.
 
 
 
