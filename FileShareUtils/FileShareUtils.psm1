@@ -492,7 +492,6 @@ Function Convert-SDtoSDDL($ptr2SD,$SECURITY_INFORMATION){
     $SDDL_REVISION_1 = 1
 
 	$return = [Netapi]::IsValidSecurityDescriptor($ptr2SD)
-    #Write-Host $return
 
     $sddlptr = [IntPtr]::Zero
     $sddllength = [IntPtr]::Zero
@@ -554,6 +553,7 @@ Function Get-NetShares{
             Author: Jean-Marc Ulrich
             Version History:
                 1.0 //First version 10.05.2018
+                1.1 //Changed to support servers with more than ~250 shares
 
         .EXAMPLE
             Get-NetShares -Server 'srv1234'
@@ -575,57 +575,61 @@ Function Get-NetShares{
 	    $handle = 0
         $Shares = @()
         $struct = New-Object Netapi+SHARE_INFO_502
-        $return = [Netapi]::NetShareEnum($Server,502,[ref]$buffer,-1,[ref]$entries, [ref]$total,[ref]$handle) 
+        $ReadFinished = $False
 
+        While($ReadFinished -eq $False){
+            $return = [Netapi]::NetShareEnum($Server,502,[ref]$buffer,-1,[ref]$entries, [ref]$total,[ref]$handle) 
 
-        If($return -ne 0){
-            Write-Output ([ComponentModel.Win32Exception][Int32]$ret).Message
-            Throw ("Error during NetShareEnum: " + (Get-NetAPIReturnInfo $return))
-        }
+            If($return -ne 0 -and $return -ne 234){
+               Throw ("Error during NetShareEnum: " + (Get-NetAPIReturnInfo $return))
+            }
 
-		$offset = $buffer.ToInt64()
-		$increment = [System.Runtime.Interopservices.Marshal]::SizeOf([System.Type]$struct.GetType())
+            If($entries -eq $total -and $return -eq 0){$ReadFinished = $True}
 
-		For ($i = 0; $i -lt $entries; $i++)
-		{
-            # Define output object
-	        $Share = New-Object -TypeName PSObject
-            $ptr = New-Object system.Intptr -ArgumentList $offset
+		    $offset = $buffer.ToInt64()
+		    $increment = [System.Runtime.Interopservices.Marshal]::SizeOf([System.Type]$struct.GetType())
+
+		    For ($i = 0; $i -lt $entries; $i++)
+		    {
+                # Define output object
+	            $Share = New-Object -TypeName PSObject
+                $ptr = New-Object system.Intptr -ArgumentList $offset
 	            
-            $str502 = [system.runtime.interopservices.marshal]::PtrToStructure($ptr, [System.Type]$struct.GetType())
-			$offset = $ptr.ToInt64()
-	        $offset += $increment
+                $str502 = [system.runtime.interopservices.marshal]::PtrToStructure($ptr, [System.Type]$struct.GetType())
+			    $offset = $ptr.ToInt64()
+	            $offset += $increment
 
-            # Get the easy data
-            $Share | Add-Member Server $Server
-            $Share | Add-Member Name $str502.Name
-            $Share | Add-Member Path $str502.Path
-            $Share | Add-Member Description $str502.Remark
-            $Share | Add-Member CurrentUses $str502.CurrentUses
+                # Get the easy data
+                $Share | Add-Member Server $Server
+                $Share | Add-Member Name $str502.Name
+                $Share | Add-Member Path $str502.Path
+                $Share | Add-Member Description $str502.Remark
+                $Share | Add-Member CurrentUses $str502.CurrentUses
 
-            # Get the type
-            If (($str502.Type -band 0x00000001) -ne 0 -and ($str502.Type -band 0x00000002) -ne 0){
-                $Type = "IPC"
-            } Else {
-                If ($str502.Type -band 0x00000001){
-                    $Type = "Print Queue"
+                # Get the type
+                If (($str502.Type -band 0x00000001) -ne 0 -and ($str502.Type -band 0x00000002) -ne 0){
+                    $Type = "IPC"
                 } Else {
-                    If ($str502.Type -band 0x00000002){
-                        $Type = "Device"
+                    If ($str502.Type -band 0x00000001){
+                        $Type = "Print Queue"
                     } Else {
-                        $Type = "Disk Drive"
+                        If ($str502.Type -band 0x00000002){
+                            $Type = "Device"
+                        } Else {
+                            $Type = "Disk Drive"
+                        }
                     }
                 }
-            }
-            If (($str502.Type -band 0x40000000) -ne 0){
-                $Type = $Type + " Temporary"
-            }
-            If (($str502.Type -band 0x80000000) -ne 0){
-                $Type = $Type + " Special"
-            }
-            $Share | Add-Member Type $Type
+                If (($str502.Type -band 0x40000000) -ne 0){
+                    $Type = $Type + " Temporary"
+                }
+                If (($str502.Type -band 0x80000000) -ne 0){
+                    $Type = $Type + " Special"
+                }
+                $Share | Add-Member Type $Type
 
-            $Shares += $Share
+                $Shares += $Share
+            }
         }
 
         $Shares | Sort-Object Path
@@ -902,7 +906,6 @@ Function New-NetShare{
         $return = [Netapi]::NetShareAdd($Server,502,$bufptr,$paramerror)
 
         If($return -ne 0){
-            #Write-Output ([ComponentModel.Win32Exception][Int32]$return).Message
             Throw ("Error during NetShareAdd: " + (Get-NetAPIReturnInfo $return))
         }
 
@@ -1071,7 +1074,6 @@ Function Set-NetShare{
             $return = [Netapi]::NetShareSetInfo($Server,$Name,502,$bufptr,$paramerror)
 
             If($return -ne 0){
-                #Write-Output ([ComponentModel.Win32Exception][Int32]$return).Message
                 Throw ("Error during NetShareSetInfo 502: " + (Get-NetAPIReturnInfo $return))
             }
         }
@@ -1107,7 +1109,6 @@ Function Set-NetShare{
             $return = [Netapi]::NetShareSetInfo($Server,$Name,1005,$bufptr,$paramerror)
 
             If($return -ne 0){
-                #Write-Output ([ComponentModel.Win32Exception][Int32]$return).Message
                 Throw ("Error during NetShareSetInfo 1005: " + (Get-NetAPIReturnInfo $return))
             }
         }
@@ -1215,7 +1216,6 @@ Function Get-NetSessions{
 	    $return = [Netapi]::NetSessionEnum($server, $client, $user, $level,[ref]$buffer, -1,[ref]$entries, [ref]$total,[ref]$handle)
 
         If($return -ne 0){
-            Write-Output ([ComponentModel.Win32Exception][Int32]$ret).Message
             Throw ("Error during NetShareEnum: " + (Get-NetAPIReturnInfo $return))
         }
 
@@ -1307,7 +1307,6 @@ Function Get-NetOpenFiles{
 	    $return = [Netapi]::NetFileEnum($server,$path,$user,$level,[ref]$buffer,-1,[ref]$entries, [ref]$total,[ref]$handle) 
 
         If($return -ne 0){
-            Write-Output ([ComponentModel.Win32Exception][Int32]$ret).Message
             Throw ("Error during NetShareEnum: " + (Get-NetAPIReturnInfo $return))
         }
 
