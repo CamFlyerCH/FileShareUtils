@@ -413,8 +413,12 @@ Function Get-DNSGet-DNSReverseLookup{
         [string]$IP
     )
     Process {
-        Trap{$IP;continue} 
-        [System.Net.Dns]::GetHostEntry($IP).HostName
+        IF($IP.Contains(".")){
+            Trap{$IP;continue}
+            [System.Net.Dns]::GetHostEntry($IP).HostName
+        } Else {
+            $IP
+        }
     }
 }
 
