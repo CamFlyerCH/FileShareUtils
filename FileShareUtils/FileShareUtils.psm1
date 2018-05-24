@@ -1217,41 +1217,45 @@ Function Get-NetSessions{
 	    $Sessions = @()
         $client = $null # for NetAPP compatibility
         $user = $null # for NetAPP compatibility
-	    $return = [Netapi]::NetSessionEnum($server, $client, $user, $level,[ref]$buffer, -1,[ref]$entries, [ref]$total,[ref]$handle)
+        $ReadFinished = $False
 
-        If($return -ne 0){
-            Throw ("Error during NetShareEnum: " + (Get-NetAPIReturnInfo $return))
+        While($ReadFinished -eq $False){
+        
+            $return = [Netapi]::NetSessionEnum($server, $client, $user, $level,[ref]$buffer, -1,[ref]$entries, [ref]$total,[ref]$handle)
+
+            If($return -ne 0 -and $return -ne 234){
+                Throw ("Error during NetSessionEnum: " + (Get-NetAPIReturnInfo $return))
+            }
+
+            If($entries -eq $total -and $return -eq 0){$ReadFinished = $True}
+
+            $offset = $buffer.ToInt64()
+            $increment = [System.Runtime.Interopservices.Marshal]::SizeOf([System.Type]$struct.GetType())
+
+            for ($i = 0; $i -lt $entries; $i++)
+            {
+                $ptr = New-Object system.Intptr -ArgumentList $offset
+                $Session = [system.runtime.interopservices.marshal]::PtrToStructure($ptr, [System.Type]$struct.GetType())
+
+                $offset = $ptr.ToInt64()
+                $offset += $increment
+
+                # Resolve hostname
+                $Clientname = Get-DNSGet-DNSReverseLookup $Session.Name
+
+                $TimeTS = New-TimeSpan -Seconds $Session.Time
+                $Time = [String]([Int]$TimeTS.TotalHours) + ":" + [String]($TimeTS.Minutes)
+                $Connected = ($Now - $TimeTS)       # .ToString('yyyy-MM-dd HH:mm')
+
+                $IdleTS = New-TimeSpan -Seconds $Session.IdleTime
+                $Idle = [String]([Int]$IdleTS.TotalHours) + ":" + [String]($IdleTS.Minutes)
+                $IdleSince = ($Now - $IdleTS)       # .ToString('yyyy-MM-dd HH:mm')
+
+                $Sessions += $Session | Select-Object -Property Username,@{n='Client';e={$Clientname}},@{n='Opens';e={$_.NumOpens}},@{n='TimeTS';e={$TimeTS}},@{n='Time';e={$Time}},@{n='Connected';e={$Connected}},@{n='IdleTS';e={$IdleTS}},@{n='Idle';e={$Idle}},@{n='IdleSince';e={$IdleSince}},ConnectionType 
+            }
         }
 
-
-		$offset = $buffer.ToInt64()
-		$increment = [System.Runtime.Interopservices.Marshal]::SizeOf([System.Type]$struct.GetType())
-
-		for ($i = 0; $i -lt $entries; $i++)
-		{
-	        $ptr = New-Object system.Intptr -ArgumentList $offset
-	        $Session = [system.runtime.interopservices.marshal]::PtrToStructure($ptr, [System.Type]$struct.GetType())
-
-			$offset = $ptr.ToInt64()
-	        $offset += $increment
-
-            # Resolve hostname
-            $Clientname = Get-DNSGet-DNSReverseLookup $Session.Name
-
-            $TimeTS = New-TimeSpan -Seconds $Session.Time
-            $Time = [String]([Int]$TimeTS.TotalHours) + ":" + [String]($TimeTS.Minutes)
-            $Connected = ($Now - $TimeTS)       # .ToString('yyyy-MM-dd HH:mm')
-
-            $IdleTS = New-TimeSpan -Seconds $Session.IdleTime
-            $Idle = [String]([Int]$IdleTS.TotalHours) + ":" + [String]($IdleTS.Minutes)
-            $IdleSince = ($Now - $IdleTS)       # .ToString('yyyy-MM-dd HH:mm')
-
-            $Sessions += $Session | Select-Object -Property Username,@{n='Client';e={$Clientname}},@{n='Opens';e={$_.NumOpens}},@{n='TimeTS';e={$TimeTS}},@{n='Time';e={$Time}},@{n='Connected';e={$Connected}},@{n='IdleTS';e={$IdleTS}},@{n='Idle';e={$Idle}},@{n='IdleSince';e={$IdleSince}},ConnectionType 
-		}
-
-
-	    $Sessions = $Sessions | Sort-Object Username,Client
-        $Sessions
+	    $Sessions | Sort-Object Username,Client
 
         # Cleanup memory
         [Netapi]::NetApiBufferFree($buffer) | Out-Null
@@ -1308,37 +1312,44 @@ Function Get-NetOpenFiles{
 	    $handle = 0
 	    $Files = @()
         $user = $null # for NetAPP compatibility
-	    $return = [Netapi]::NetFileEnum($server,$path,$user,$level,[ref]$buffer,-1,[ref]$entries, [ref]$total,[ref]$handle) 
+        $ReadFinished = $False
 
-        If($return -ne 0){
-            Throw ("Error during NetShareEnum: " + (Get-NetAPIReturnInfo $return))
-        }
+        While($ReadFinished -eq $False){
 
-		$offset = $buffer.ToInt64()
-		$increment = [System.Runtime.Interopservices.Marshal]::SizeOf([System.Type]$struct.GetType())
+            $return = [Netapi]::NetFileEnum($server,$path,$user,$level,[ref]$buffer,-1,[ref]$entries, [ref]$total,[ref]$handle) 
 
-		for ($i = 0; $i -lt $entries; $i++)
-		{
-	        $ptr = New-Object system.Intptr -ArgumentList $offset
-	        $File = [system.runtime.interopservices.marshal]::PtrToStructure($ptr, [System.Type]$struct.GetType())
-
-			$offset = $ptr.ToInt64()
-	        $offset += $increment
-
-            Switch ($File.Permissions){
-                1 { $Access = "Read" }
-                2 { $Access = "Write" }
-                3 { $Access = "Write" }
-                4 { $Access = "Create" }
-
-                default { $Access = "" }
+            If($return -ne 0 -and $return -ne 234){
+                Throw ("Error during NetFileEnum: " + (Get-NetAPIReturnInfo $return))
             }
 
-            $Files += $File | Select-Object Path,User,@{n='Access';e={$Access}},@{n='Locks';e={$File.NumLocks}}
+            If($entries -eq $total -and $return -eq 0){$ReadFinished = $True}
 
-		}
-	    $Files = $Files | Sort-Object Path,User
-        $Files
+            $offset = $buffer.ToInt64()
+            $increment = [System.Runtime.Interopservices.Marshal]::SizeOf([System.Type]$struct.GetType())
+
+            for ($i = 0; $i -lt $entries; $i++)
+            {
+                $ptr = New-Object system.Intptr -ArgumentList $offset
+                $File = [system.runtime.interopservices.marshal]::PtrToStructure($ptr, [System.Type]$struct.GetType())
+
+                $offset = $ptr.ToInt64()
+                $offset += $increment
+
+                Switch ($File.Permissions){
+                    1 { $Access = "Read" }
+                    2 { $Access = "Write" }
+                    3 { $Access = "Write" }
+                    4 { $Access = "Create" }
+
+                    default { $Access = "" }
+                }
+
+                $Files += $File | Select-Object Path,User,@{n='Access';e={$Access}},@{n='Locks';e={$File.NumLocks}}
+
+            }
+        }
+        
+	    $Files | Sort-Object Path,User
 
         # Cleanup memory
         [Netapi]::NetApiBufferFree($buffer) | Out-Null
