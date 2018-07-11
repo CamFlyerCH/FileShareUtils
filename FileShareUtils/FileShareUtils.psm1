@@ -909,6 +909,8 @@ Function New-NetShare{
 
         $return = [Netapi]::NetShareAdd($Server,502,$bufptr,$paramerror)
 
+        [Netapi]::NetApiBufferFree($bufptr) | Out-Null
+
         If($return -ne 0){
             Throw ("Error during NetShareAdd: " + (Get-NetAPIReturnInfo $return))
         }
@@ -1112,6 +1114,8 @@ Function Set-NetShare{
 
             $return = [Netapi]::NetShareSetInfo($Server,$Name,1005,$bufptr,$paramerror)
 
+            [Netapi]::NetApiBufferFree($bufptr) | Out-Null
+
             If($return -ne 0){
                 Throw ("Error during NetShareSetInfo 1005: " + (Get-NetAPIReturnInfo $return))
             }
@@ -1120,7 +1124,6 @@ Function Set-NetShare{
         # Cleanup memory
         [Netapi]::NetApiBufferFree($bufptr502) | Out-Null
         [Netapi]::NetApiBufferFree($bufptr1005) | Out-Null
-        [Netapi]::NetApiBufferFree($bufptr) | Out-Null
 
     }
 }
