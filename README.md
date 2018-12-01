@@ -94,6 +94,27 @@ This function returns nothing.
 
 <br/>
 
+#### Redo-NetShare [[-Server] \<string>] [-Name] \<string> [-Path] \<string> [[-Description] \<string>] [[-Permissions] \<string>] [[-ABE] \<string>] [[-CachingMode] \<string>] [[-MaxUses] \<int>] 
+
+With this command you create a new share on the machine or on a remote server. If the share already exists, the share will be modified with the given options. If the path changes, the share will be deleted and recreated while preserving the options from the deleted share.
+
+The folowing parameters are available:
+
+Property | Description
+---------|----------
+Server | The machine hosting the share, default is the local machine
+**&#42; Name** | The name of the share
+**&#42; Path** | The local path to be shared
+Description | The remark or description of the share
+Permissions | The share permissions to set on the share itself. Speical format: Every permission is seperated by a comma and the identity and the access right are seperated by a &#124; _(pipe)_ <br/>Default: Everyone&#124;FullControl<br/>Possible Permissions: Read, Change, FullControl, Deny-FullControl<br/>Possible Identities: Everyone, BUILTIN\Administrators, BUILTIN\Users, BUILTIN\xxxxx (server local users or groups), DOMAIN\UserName, ADCORP\GroupName, \<NETBIOSDOMAINNAME>\\\<sAMAccountName> (domain objects)
+ABE | Access based enumaration, can be Enabled or Disabled (default)
+CachingMode | Offline Folder configuration, can be:<br/>"Manual" (default)<br/>"None" <br/>"Documents" (all documents are automaticaly offline available)<br/>"Programs" ("Performance option", all files are automaticaly offline available)
+MaxUses | Allowed connections to the share. Default is -1 that equals maximum
+
+This function returns nothing.
+
+<br/>
+
 #### Set-NetShare [[-Server] \<string>] [-Name] \<string> [[-Description] \<string>] [[-Permissions] \<string>] [[-ABE] \<string>] [[-CachingMode]\<string>] [[-MaxUses] \<int>]
 
 With this command you modify all changeable options on a share on the machine or on a remote server.
@@ -130,9 +151,28 @@ This function returns nothing.
 
 <br/>
 
-#### Get-NetSessions [[-Server] \<string>]
+#### Get-NetShareDiskSpace [-Name] \<string> [[-Server] \<string>] [[-Unit] \<string>] 
 
-With this command you get a detailed and sorted (by user and client) list of all the opened SMB sessions on the machine or on a specified server. 
+With this command you retrieve the availabe space for the calling user and the total free space on the disk and the total disk space of the specified share on the machine or from a remote server.
+The returned values are in UInt64. Default these are bytes, but with the Unit option you can get rounded values in KB, MB, GB or TB.
+
+The returned objects will have the folowing properties:
+
+Property | Description
+---------|----------
+Server | The machine hosting the share
+Name | The name of the share
+Path | The UNC path to the share
+UserFree | The availabe space for the calling user (important if quotas are set)
+DiskFree | The availabe space on the disk or volume
+DiskSize | The total size of the disk or volume
+
+<br/>
+
+#### Get-NetSessions [[-Server] \<string>]  [[-Level] \<Int>]
+
+With this command you get a detailed and sorted (by user and client) list of all the opened SMB sessions on the machine or on a specified server.
+For NAS that return an error "The system call level is not correct" try the option -Level 1.
 
 The returned array of objects will have the folowing properties:
 
@@ -147,7 +187,7 @@ Connected | DateTime the session started
 IdleTS | Session idle time in powershell timespan format
 Idle | Session idle time as a string in hours and minutes
 IdleSince | DateTime the session is idle
-ConnectionType | This can be empty or showing the SMB version used
+ConnectionType | This can be empty or showing the SMB version used (only with Level 502)
 
 <br/>
 

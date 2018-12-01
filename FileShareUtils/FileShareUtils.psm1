@@ -3,9 +3,9 @@
 #
 # Large parts of the used code where posted by 
 # Micky Balladelli micky@balladelli.com on https://balladelli.com/category/smb/
-# and Alexander in his Kazun PowerShell blog https://kazunposh.wordpress.com/2011/12/11/%D1%83%D0%BF%D1%80%D0%B0%D0%B2%D0%BB%D0%B5%D0%BD%D0%B8%D0%B5-access-based-enumeration-%D1%81-%D0%BF%D0%BE%D0%BC%D0%BE%D1%89%D1%8C%D1%8E-powershell/
+# and Alexander in his Kazun PowerShell blog https://kazunposh.wordpress.com/
 
-# Code to access the netapi32 and advapi32 functions
+# Code to access the netapi32, kernel32, coredll and advapi32 functions
 Add-Type -TypeDefinition @" 
 using System; 
 using System.Runtime.InteropServices;
@@ -390,6 +390,13 @@ public class Netapi
         Int32 level,
         IntPtr buf,
         IntPtr parm_err );
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool GetDiskFreeSpaceEx(string lpDirectoryName,
+	    out ulong lpFreeBytesAvailable,
+	    out ulong lpTotalNumberOfBytes,
+	    out ulong lpTotalNumberOfFreeBytes);
 
     [DllImport("Netapi32.dll", SetLastError=true)]
     public static extern int NetShareDel(
@@ -1128,6 +1135,126 @@ Function Set-NetShare{
     }
 }
 
+Function Redo-NetShare{
+    <#
+        .SYNOPSIS
+            Creates a network file share local or on a remote computer. If a share with the same name already exists it will be modified if needed
+
+        .DESCRIPTION
+            Creates or modify a network share
+            by using the NetAPI32.dll (without WMI)
+
+        .PARAMETER Server
+            Computername on the network, local if left blank
+
+        .PARAMETER Name
+            Name of the share
+
+        .PARAMETER Path
+            Local disk path to share
+
+        .PARAMETER Description
+            The description/remark of the share
+
+        .PARAMETER Permissions
+            Permissions on the share itself. Speical format: Every permission is seperated by a comma and the identity and the access right are seperated by a |
+            Default: Everyone|FullControl
+            Possible Permissions: Read, Change, FullControl, Deny-FullControl
+            Possible Identities: Everyone, BUILTIN\Administrators, BUILTIN\Users, BUILTIN\xxxxx (server local users or groups), DOMAIN\UserName, ADCORP\GroupName, <NETBIOSDOMAINNAME>\<sAMAccountName> (domain objects)
+
+        .PARAMETER ABE
+            Access based enumaration, can be Enabled or Disabled (default)
+
+        .PARAMETER CachingMode
+            Offline Folder configuration, can be Manual (default), "None", "Documents" (all documents are automaticaly offline available), "Programs" ("Performance option", all files are automaticaly offline available)
+
+        .PARAMETER MaxUses
+            Allowed connections to the share. Default is -1 that equals maximum
+
+
+        .NOTES
+            Name: Redo-NetShare
+            Author: Jean-Marc Ulrich
+            Version History:
+                1.0 //First version 01.12.2018
+
+        .EXAMPLE
+            Redo-NetShare -Server 'srv1234' -Name 'TestShare' -Path 'D:\Data'
+
+            Description
+            -----------
+            Shares the path D:\Data on the server named srv1234 as TestShare. If a share with the same name on the same server exists, it will be changed or recreated
+    #>
+	[CmdletBinding()]
+    Param (
+        [Parameter(Position=0,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [string]$Server = ($env:computername).toLower(),
+
+        [Parameter(Position=1,Mandatory=$True,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [string]$Name,
+
+        [Parameter(Position=2,Mandatory=$True,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [string]$Path,
+
+        [Parameter(Position=3,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [string]$Description,
+
+        [Parameter(Position=4,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [string]$Permissions,  # = "Everyone|FullControl"
+
+        [Parameter(Position=5,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [ValidateSet("Disabled", "Enabled", IgnoreCase = $true)]  # FolderEnumerationMode AccessBased, Unrestricted
+        [string]$ABE = "Disabled",
+
+        [Parameter(Position=6,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [ValidateSet("Manual", "None", "Documents", "Programs", IgnoreCase = $true)]
+        [string]$CachingMode = "Manual",
+
+        [Parameter(Position=7,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [Int]$MaxUses = -1
+
+    )
+    Begin {
+
+        Try{
+            $ExistingShare = Get-NetShare -Server $Server -Name $Name
+        } Catch {
+            $error.clear()
+        }
+
+        If($ExistingShare){
+            # Preserve values if not changed
+            If(-Not $PSBoundParameters.ContainsKey('Description')){
+                $Description = $ExistingShare.Description
+            }
+            If(-Not $PSBoundParameters.ContainsKey('Permissions')){
+                $Permissions = $ExistingShare.ShareACLText
+            }
+            If(-Not $PSBoundParameters.ContainsKey('ABE')){
+                $ABE = $ExistingShare.ABE
+            }
+            If(-Not $PSBoundParameters.ContainsKey('CachingMode')){
+                $CachingMode = $ExistingShare.CachingMode
+            }
+            If(-Not $PSBoundParameters.ContainsKey('MaxUses')){
+                $MaxUses = $ExistingShare.ConcurrentUserLimit
+            }
+
+            If($ExistingShare.Path -eq $Path){
+                # Just modify Settings
+                $return = Set-NetShare -Server $Server -Name $Name -Description $Description -Permissions $Permissions -ABE $ABE -CachingMode $CachingMode -MaxUses $MaxUses
+            } Else {
+                # Path is different, so the share must be erased and recreated
+                $return = Remove-NetShare -Server $Server -Name $Name
+                $return = New-NetShare -Server $Server -Name $Name -Path $Path -Description $Description -Permissions $Permissions -ABE $ABE -CachingMode $CachingMode -MaxUses $MaxUses
+            }
+
+        } Else {
+            $return = New-NetShare -Server $Server -Name $Name -Path $Path -Description $Description -Permissions $Permissions -ABE $ABE -CachingMode $CachingMode -MaxUses $MaxUses
+        }
+    }
+}
+
 Function Remove-NetShare{
     <#
         .SYNOPSIS
@@ -1147,7 +1274,7 @@ Function Remove-NetShare{
             Name: Remove-NetShare
             Author: Jean-Marc Ulrich
             Version History:
-                1.0 //First version 18.05.2018
+                1.0 //First version 01.12.2018
 
         .EXAMPLE
             Remove-NetShare -Server 'srv1234' -Name 'TestShare'
@@ -1175,6 +1302,86 @@ Function Remove-NetShare{
 }
 
 
+Function Get-NetShareDiskspace{
+    <#
+        .SYNOPSIS
+            Retrieves disk space infos from the specified network share
+
+        .DESCRIPTION
+            Retrieves the availabe space for the calling user and the total free space on the disk and the total disk space
+
+        .PARAMETER Name
+            Name of the share
+
+        .PARAMETER Server
+            Computername on the network, local if left blank
+
+        .PARAMETER Unit
+            Unit of the returned sizes, if not specified the vaules are in bytes, possible units are "KB","MB","GB" or "TB"
+
+        .NOTES
+            Name: Get-NetShareDiskspace
+            Author: Jean-Marc Ulrich
+            Version History:
+                1.0 //First version 01.12.2018
+
+        .EXAMPLE
+            Get-NetShareDiskspace -Name 'TestShare' -Server 'srv1234' -Unit GB
+
+            Description
+            -----------
+            Gets the disk space information of the share named "TestShare" of a remote server
+    #>
+	[CmdletBinding()]
+    Param (
+        [Parameter(Position=0,Mandatory=$True,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [string]$Name,
+
+        [Parameter(Position=1,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [string]$Server = ($env:computername).toLower(),
+
+        [Parameter(Position=2,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [ValidateSet("KB","MB","GB","TB",IgnoreCase = $true)]
+        [string]$Unit
+    )
+    Begin {
+        $Path = '\\' + $Server + '\' + $Name
+
+   		switch($Unit){
+			"KB" {$UnitDevider = 1kb;break}
+			"MB" {$UnitDevider = 1mb;break}
+			"GB" {$UnitDevider = 1gb;break}
+			"TB" {$UnitDevider = 1tb;break}
+			default {$UnitDevider = 1;break}
+		}
+
+		$UserFree = New-Object System.UInt64
+		$DiskFree = New-Object System.UInt64
+		$DiskSize = New-Object System.UInt64
+
+        $result = [Netapi]::GetDiskFreeSpaceEx($Path,([ref]$UserFree),([ref]$DiskSize),([ref]$DiskFree))
+
+        If(!$result){
+            $LastError = [ComponentModel.Win32Exception][Runtime.InteropServices.Marshal]::GetLastWin32Error()
+            Throw ("Error during GetDiskFreeSpaceEx for path $Path : " + $LastError)
+        }
+
+        # Define output object
+        $ShareDiskInfo = New-Object -TypeName PSObject
+
+        $ShareDiskInfo | Add-Member Server      $Server
+        $ShareDiskInfo | Add-Member Name        $Name
+        $ShareDiskInfo | Add-Member Path        $Path
+        $ShareDiskInfo | Add-Member UserFree    ([UInt64]($UserFree/$UnitDevider))
+        $ShareDiskInfo | Add-Member DiskFree    ([UInt64]($DiskFree/$UnitDevider))
+        $ShareDiskInfo | Add-Member DiskSize    ([UInt64]($DiskSize/$UnitDevider))
+
+        $ShareDiskInfo
+
+    }
+}
+
+
 Function Get-NetSessions{
     <#
         .SYNOPSIS
@@ -1186,6 +1393,9 @@ Function Get-NetSessions{
 
         .PARAMETER Server
             Computername on the network, local if left blank
+
+        .PARAMETER Level
+            NetSessionEnum info level. Defaults 502, but you can use 1 for compatibility reasons
 
         .NOTES
             Name: Get-NetSessions
@@ -1206,11 +1416,18 @@ Function Get-NetSessions{
 	[CmdletBinding()]
     Param (
         [Parameter(Position=0,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
-        [string]$Server = ($env:computername).toLower()
+        [string]$Server = ($env:computername).toLower(),
+
+        [Parameter(Position=1,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [ValidateSet(502,1)]
+        [Int]$Level = 502
     )
     Begin {
-        $level = 502
-        $struct = New-Object netapi+SESSION_INFO_502
+        If($Level -eq 1){
+            $struct = New-Object netapi+SESSION_INFO_1
+        } else {
+            $struct = New-Object netapi+SESSION_INFO_502
+        }
 
 	    $buffer = 0
 	    $entries = 0
@@ -1254,7 +1471,11 @@ Function Get-NetSessions{
                 $Idle = [String]([Int]$IdleTS.TotalHours) + ":" + [String]($IdleTS.Minutes)
                 $IdleSince = ($Now - $IdleTS)       # .ToString('yyyy-MM-dd HH:mm')
 
-                $Sessions += $Session | Select-Object -Property Username,@{n='Client';e={$Clientname}},@{n='Opens';e={$_.NumOpens}},@{n='TimeTS';e={$TimeTS}},@{n='Time';e={$Time}},@{n='Connected';e={$Connected}},@{n='IdleTS';e={$IdleTS}},@{n='Idle';e={$Idle}},@{n='IdleSince';e={$IdleSince}},ConnectionType 
+                If($Level -eq 1){
+                    $Sessions += $Session | Select-Object -Property Username,@{n='Client';e={$Clientname}},@{n='Opens';e={$_.NumOpens}},@{n='TimeTS';e={$TimeTS}},@{n='Time';e={$Time}},@{n='Connected';e={$Connected}},@{n='IdleTS';e={$IdleTS}},@{n='Idle';e={$Idle}},@{n='IdleSince';e={$IdleSince}}
+                } else {
+                    $Sessions += $Session | Select-Object -Property Username,@{n='Client';e={$Clientname}},@{n='Opens';e={$_.NumOpens}},@{n='TimeTS';e={$TimeTS}},@{n='Time';e={$Time}},@{n='Connected';e={$Connected}},@{n='IdleTS';e={$IdleTS}},@{n='Idle';e={$Idle}},@{n='IdleSince';e={$IdleSince}},ConnectionType 
+                }
             }
         }
 
