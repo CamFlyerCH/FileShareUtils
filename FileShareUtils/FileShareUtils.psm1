@@ -5,7 +5,7 @@
 # Micky Balladelli micky@balladelli.com on https://balladelli.com/category/smb/
 # and Alexander in his Kazun PowerShell blog https://kazunposh.wordpress.com/
 
-# Code to access the netapi32, kernel32, coredll and advapi32 functions
+# Code to access the netapi32, kernel32 and advapi32 functions
 Add-Type -TypeDefinition @" 
 using System; 
 using System.Runtime.InteropServices;
@@ -1274,7 +1274,7 @@ Function Remove-NetShare{
             Name: Remove-NetShare
             Author: Jean-Marc Ulrich
             Version History:
-                1.0 //First version 01.12.2018
+                1.0 //First version 18.05.2018
 
         .EXAMPLE
             Remove-NetShare -Server 'srv1234' -Name 'TestShare'
@@ -1402,6 +1402,7 @@ Function Get-NetSessions{
             Author: Jean-Marc Ulrich
             Version History:
                 1.0 //First version 11.05.2018
+                1.1 //First version 01.12.2018    Add level option
 
             OUTPUT : Array of objects with Username,Client,Opens (open files),TimeTS (as timespan),Time (as string),Connected (as DateTime),IdleTS (as timespan),Idle (as string),IdleSince (as DateTime),ConnectionType
 
