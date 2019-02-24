@@ -1404,7 +1404,7 @@ Function Get-NetSessions{
                 1.0 //First version 11.05.2018
                 1.1 //First version 01.12.2018    Add level option
 
-            OUTPUT : Array of objects with Username,Client,Opens (open files),TimeTS (as timespan),Time (as string),Connected (as DateTime),IdleTS (as timespan),Idle (as string),IdleSince (as DateTime),ConnectionType
+            OUTPUT : Array of objects with Username,Client,ClientIP,Opens (open files),TimeTS (as timespan),Time (as string),Connected (as DateTime),IdleTS (as timespan),Idle (as string),IdleSince (as DateTime),ConnectionType
 
 
         .EXAMPLE
@@ -1460,7 +1460,8 @@ Function Get-NetSessions{
 
                 $offset = $ptr.ToInt64()
                 $offset += $increment
-
+                
+                $ClientIP = $session.Name
                 # Resolve hostname
                 $Clientname = Get-DNSGet-DNSReverseLookup $Session.Name
 
@@ -1473,9 +1474,9 @@ Function Get-NetSessions{
                 $IdleSince = ($Now - $IdleTS)       # .ToString('yyyy-MM-dd HH:mm')
 
                 If($Level -eq 1){
-                    $Sessions += $Session | Select-Object -Property Username,@{n='Client';e={$Clientname}},@{n='Opens';e={$_.NumOpens}},@{n='TimeTS';e={$TimeTS}},@{n='Time';e={$Time}},@{n='Connected';e={$Connected}},@{n='IdleTS';e={$IdleTS}},@{n='Idle';e={$Idle}},@{n='IdleSince';e={$IdleSince}}
+                    $Sessions += $Session | Select-Object -Property Username,@{n='Client';e={$Clientname}},@{n='ClientIP';e={$ClientIP}},@{n='Opens';e={$_.NumOpens}},@{n='TimeTS';e={$TimeTS}},@{n='Time';e={$Time}},@{n='Connected';e={$Connected}},@{n='IdleTS';e={$IdleTS}},@{n='Idle';e={$Idle}},@{n='IdleSince';e={$IdleSince}}
                 } else {
-                    $Sessions += $Session | Select-Object -Property Username,@{n='Client';e={$Clientname}},@{n='Opens';e={$_.NumOpens}},@{n='TimeTS';e={$TimeTS}},@{n='Time';e={$Time}},@{n='Connected';e={$Connected}},@{n='IdleTS';e={$IdleTS}},@{n='Idle';e={$Idle}},@{n='IdleSince';e={$IdleSince}},ConnectionType 
+                    $Sessions += $Session | Select-Object -Property Username,@{n='Client';e={$Clientname}},@{n='ClientIP';e={$ClientIP}},@{n='Opens';e={$_.NumOpens}},@{n='TimeTS';e={$TimeTS}},@{n='Time';e={$Time}},@{n='Connected';e={$Connected}},@{n='IdleTS';e={$IdleTS}},@{n='Idle';e={$Idle}},@{n='IdleSince';e={$IdleSince}},ConnectionType 
                 }
             }
         }

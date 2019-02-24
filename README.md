@@ -179,7 +179,8 @@ The returned array of objects will have the folowing properties:
 Property | Description
 ---------|----------
 Username | Username used to authenticate
-Client | The name (if reverse lookup is possible) or the IP address of the client
+Client | The name (if reverse lookup is possible) or the IP address of the client (if not)
+ClientIP | The IP address of the client
 Opens | The count of opened objects / files
 TimeTS | Session duration in powershell timespan format
 Time | Session duration as a string in hours and minutes
