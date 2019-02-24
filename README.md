@@ -16,7 +16,7 @@ All these functions use netapi32 or advapi32 dll calls.
 
 With this command you get a list of all shares on the machine or from a specified server.
 
-The returned array of objects will have the folowing properties:
+The returned array of objects will have the following properties:
 
 Property | Description
 ---------|----------
@@ -33,7 +33,7 @@ Type | The type of the share
 
 With this command you get a even more detailed list of all the **file** shares on the machine or from a specified server. The IPC and administrative (special) shares are left out.
 
-The returned array of objects will have the folowing properties:
+The returned array of objects will have the following properties:
 
 Property | Description
 ---------|----------
@@ -41,9 +41,9 @@ Server | The machine hosting the shares
 Name | The name of the share
 Path | The local path shared
 Description | The remark or description of the share
-ABE | Access based enumaration, can be Enabled or Disabled (default)
-CachingMode | Offline Folder configuration, can be:<br/>"Manual" (default)<br/>"None" <br/>"Documents" (all documents are automaticaly offline available)<br/>"Programs" ("Performance option", all files are automaticaly offline available)
-ShareACLText | Permissions on the share itself. Speical format: Every permission is seperated by a comma and the identity and the access right are seperated by a &#124; _(pipe)_ <br/> If blank probably the default permission "Everyone&#124;FullControl" is set.
+ABE | Access based enumeration, can be Enabled or Disabled (default)
+CachingMode | Offline Folder configuration, can be:<br/>"Manual" (default)<br/>"None" <br/>"Documents" (all documents are automatically offline available)<br/>"Programs" ("Performance option", all files are automatically offline available)
+ShareACLText | Permissions on the share itself. Special format: Every permission is separated by a comma and the identity and the access right are separated by a &#124; _(pipe)_ <br/> If blank probably the default permission "Everyone&#124;FullControl" is set.
 CurrentUses | Current connections to this share
 
 <br/>
@@ -52,7 +52,7 @@ CurrentUses | Current connections to this share
 
 With this command you get detailed information about the specified share on the machine or from a remote server.
 
-The returned objects will have the folowing properties:
+The returned objects will have the following properties:
 
 Property | Description
 ---------|----------
@@ -60,13 +60,13 @@ Server | The machine hosting the share
 Name | The name of the share
 Path | The local path shared
 Description | The remark or description of the share
-ABE | Access based enumaration, can be Enabled or Disabled (default)
-CachingMode | Offline Folder configuration, can be:<br/>"Manual" (default)<br/>"None" <br/>"Documents" (all documents are automaticaly offline available)<br/>"Programs" ("Performance option", all files are automaticaly offline available)
-ShareACLText | Permissions on the share itself. Speical format: Every permission is seperated by a comma and the identity and the access right are seperated by a &#124; _(pipe)_ <br/> If blank probably the default permission "Everyone&#124;FullControl" is set.
+ABE | Access based enumeration, can be Enabled or Disabled (default)
+CachingMode | Offline Folder configuration, can be:<br/>"Manual" (default)<br/>"None" <br/>"Documents" (all documents are automatically offline available)<br/>"Programs" ("Performance option", all files are automatically offline available)
+ShareACLText | Permissions on the share itself. Special format: Every permission is separated by a comma and the identity and the access right are separated by a &#124; _(pipe)_ <br/> If blank probably the default permission "Everyone&#124;FullControl" is set.
 CurrentUses | Current connections to this share
 ConcurrentUserLimit | Allowed connections to the share. Default is -1 that equals maximum
 BranchCache | BranchCache can be Enabled or Disabled (default)
-Flags | DEcimal value of the netapi32 1005 structure flags
+Flags | Decimal value of the netapi32 1005 structure flags
 Type | The type of the share
 ShareSDDL | The DACL of the share in SDDL format
 ShareACL | The ACL of the share in the standard powershell/.net ACL format. Try to look at the .ShareACL.Access
@@ -77,7 +77,7 @@ ShareACL | The ACL of the share in the standard powershell/.net ACL format. Try 
 
 With this command you create a new share on the machine or on a remote server. The command fails if the share already exists.
 
-The folowing parameters are available:
+The following parameters are available:
 
 Property | Description
 ---------|----------
@@ -85,9 +85,9 @@ Server | The machine hosting the share, default is the local machine
 **&#42; Name** | The name of the share
 **&#42; Path** | The local path to be shared
 Description | The remark or description of the share
-Permissions | The share permissions to set on the share itself. Speical format: Every permission is seperated by a comma and the identity and the access right are seperated by a &#124; _(pipe)_ <br/>Default: Everyone&#124;FullControl<br/>Possible Permissions: Read, Change, FullControl, Deny-FullControl<br/>Possible Identities: Everyone, BUILTIN\Administrators, BUILTIN\Users, BUILTIN\xxxxx (server local users or groups), DOMAIN\UserName, ADCORP\GroupName, \<NETBIOSDOMAINNAME>\\\<sAMAccountName> (domain objects)
-ABE | Access based enumaration, can be Enabled or Disabled (default)
-CachingMode | Offline Folder configuration, can be:<br/>"Manual" (default)<br/>"None" <br/>"Documents" (all documents are automaticaly offline available)<br/>"Programs" ("Performance option", all files are automaticaly offline available)
+Permissions | The share permissions to set on the share itself. Special format: Every permission is separated by a comma and the identity and the access right are separated by a &#124; _(pipe)_ <br/>Default: Everyone&#124;FullControl<br/>Possible Permissions: Read, Change, FullControl, Deny-FullControl<br/>Possible Identities: Everyone, BUILTIN\Administrators, BUILTIN\Users, BUILTIN\xxxxx (server local users or groups), DOMAIN\UserName, ADCORP\GroupName, \<NETBIOSDOMAINNAME>\\\<sAMAccountName> (domain objects)
+ABE | Access based enumeration, can be Enabled or Disabled (default)
+CachingMode | Offline Folder configuration, can be:<br/>"Manual" (default)<br/>"None" <br/>"Documents" (all documents are automatically offline available)<br/>"Programs" ("Performance option", all files are automatically offline available)
 MaxUses | Allowed connections to the share. Default is -1 that equals maximum
 
 This function returns nothing.
@@ -98,7 +98,7 @@ This function returns nothing.
 
 With this command you create a new share on the machine or on a remote server. If the share already exists, the share will be modified with the given options. If the path changes, the share will be deleted and recreated while preserving the options from the deleted share.
 
-The folowing parameters are available:
+The following parameters are available:
 
 Property | Description
 ---------|----------
@@ -106,9 +106,9 @@ Server | The machine hosting the share, default is the local machine
 **&#42; Name** | The name of the share
 **&#42; Path** | The local path to be shared
 Description | The remark or description of the share
-Permissions | The share permissions to set on the share itself. Speical format: Every permission is seperated by a comma and the identity and the access right are seperated by a &#124; _(pipe)_ <br/>Default: Everyone&#124;FullControl<br/>Possible Permissions: Read, Change, FullControl, Deny-FullControl<br/>Possible Identities: Everyone, BUILTIN\Administrators, BUILTIN\Users, BUILTIN\xxxxx (server local users or groups), DOMAIN\UserName, ADCORP\GroupName, \<NETBIOSDOMAINNAME>\\\<sAMAccountName> (domain objects)
-ABE | Access based enumaration, can be Enabled or Disabled (default)
-CachingMode | Offline Folder configuration, can be:<br/>"Manual" (default)<br/>"None" <br/>"Documents" (all documents are automaticaly offline available)<br/>"Programs" ("Performance option", all files are automaticaly offline available)
+Permissions | The share permissions to set on the share itself. Special format: Every permission is separated by a comma and the identity and the access right are separated by a &#124; _(pipe)_ <br/>Default: Everyone&#124;FullControl<br/>Possible Permissions: Read, Change, FullControl, Deny-FullControl<br/>Possible Identities: Everyone, BUILTIN\Administrators, BUILTIN\Users, BUILTIN\xxxxx (server local users or groups), DOMAIN\UserName, ADCORP\GroupName, \<NETBIOSDOMAINNAME>\\\<sAMAccountName> (domain objects)
+ABE | Access based enumeration, can be Enabled or Disabled (default)
+CachingMode | Offline Folder configuration, can be:<br/>"Manual" (default)<br/>"None" <br/>"Documents" (all documents are automatically offline available)<br/>"Programs" ("Performance option", all files are automatically offline available)
 MaxUses | Allowed connections to the share. Default is -1 that equals maximum
 
 This function returns nothing.
@@ -119,16 +119,16 @@ This function returns nothing.
 
 With this command you modify all changeable options on a share on the machine or on a remote server.
 
-The folowing parameters are available:
+The following parameters are available:
 
 Property | Description
 ---------|----------
 Server | The machine hosting the share, default is the local machine
 **&#42; Name** | The name of the share
 Description | The remark or description of the share
-Permissions | The share permissions to set on the share itself. Speical format: Every permission is seperated by a comma and the identity and the access right are seperated by a &#124; _(pipe)_ <br/>Possible Permissions: Read, Change, FullControl, Deny-FullControl<br/>Possible Identities: Everyone, BUILTIN\Administrators, BUILTIN\Users, BUILTIN\xxxxx (server local users or groups), DOMAIN\UserName, ADCORP\GroupName, \<NETBIOSDOMAINNAME>\\\<sAMAccountName> (domain objects)
-ABE | Access based enumaration, can be Enabled or Disabled (default)
-CachingMode | Offline Folder configuration, can be:<br/>"Manual" (default)<br/>"None" <br/>"Documents" (all documents are automaticaly offline available)<br/>"Programs" ("Performance option", all files are automaticaly offline available)
+Permissions | The share permissions to set on the share itself. Special format: Every permission is separated by a comma and the identity and the access right are separated by a &#124; _(pipe)_ <br/>Possible Permissions: Read, Change, FullControl, Deny-FullControl<br/>Possible Identities: Everyone, BUILTIN\Administrators, BUILTIN\Users, BUILTIN\xxxxx (server local users or groups), DOMAIN\UserName, ADCORP\GroupName, \<NETBIOSDOMAINNAME>\\\<sAMAccountName> (domain objects)
+ABE | Access based enumeration, can be Enabled or Disabled (default)
+CachingMode | Offline Folder configuration, can be:<br/>"Manual" (default)<br/>"None" <br/>"Documents" (all documents are automatically offline available)<br/>"Programs" ("Performance option", all files are automatically offline available)
 MaxUses | Allowed connections to the share. Default is -1 that equals maximum
 
 This function returns nothing.
@@ -139,7 +139,7 @@ This function returns nothing.
 
 With this command deletes a share on the machine or on a remote server.
 
-The folowing parameters 
+The following parameters 
 
 Property | Description
 ---------|----------
@@ -153,18 +153,18 @@ This function returns nothing.
 
 #### Get-NetShareDiskSpace [-Name] \<string> [[-Server] \<string>] [[-Unit] \<string>] 
 
-With this command you retrieve the availabe space for the calling user and the total free space on the disk and the total disk space of the specified share on the machine or from a remote server.
+With this command you retrieve the available space for the calling user and the total free space on the disk and the total disk space of the specified share on the machine or from a remote server.
 The returned values are in UInt64. Default these are bytes, but with the Unit option you can get rounded values in KB, MB, GB or TB.
 
-The returned objects will have the folowing properties:
+The returned objects will have the following properties:
 
 Property | Description
 ---------|----------
 Server | The machine hosting the share
 Name | The name of the share
 Path | The UNC path to the share
-UserFree | The availabe space for the calling user (important if quotas are set)
-DiskFree | The availabe space on the disk or volume
+UserFree | The available space for the calling user (important if quotas are set)
+DiskFree | The available space on the disk or volume
 DiskSize | The total size of the disk or volume
 
 <br/>
@@ -174,7 +174,7 @@ DiskSize | The total size of the disk or volume
 With this command you get a detailed and sorted (by user and client) list of all the opened SMB sessions on the machine or on a specified server.
 For NAS that return an error "The system call level is not correct" try the option -Level 1.
 
-The returned array of objects will have the folowing properties:
+The returned array of objects will have the following properties:
 
 Property | Description
 ---------|----------
@@ -195,9 +195,9 @@ ConnectionType | This can be empty or showing the SMB version used (only with Le
 #### Get-NetOpenFiles [[-Server] \<string>] [[-Path] \<string>] 
 
 With this command you get a sorted (by path and user) list of all over SMB opened files on the machine or on a specified server.  
-Be spcifing the left part of the local path the list is filtered to this path and subfolders.
+By specifying the left part of the local path the list is filtered to this path and subfolders.
 
-The returned array of objects will have the folowing properties:
+The returned array of objects will have the following properties:
 
 Property | Description
 ---------|----------
@@ -223,7 +223,7 @@ Install it in PowerShell like this:
 To update the module use -Force :  
 ``Install-Module FileShareUtils -Force``
 
-Get more informations about the module like this:  
+Get more information about the module like this:  
 Before installation: ``Save-Module -Name FileShareUtils -Path <path>``
 
 After installation: ``Get-InstalledModule -Name FileShareUtils | FL``  
@@ -243,7 +243,7 @@ Open your module folder. Probably one of these two:
 (Or open a command prompt an enter ``set`` ps to view the env. variable.)
 
 Create a folder named 'FileShareUtils' .  
-Oprional: Create a sub folder with a version number if you like.
+Optional: Create a sub folder with a version number if you like.
 Copy at least the two files of the module in the created folder:  
 * FileShareUtils.psd1
 * FileShareUtils.psm1
@@ -253,7 +253,7 @@ Copy at least the two files of the module in the created folder:
 
 ## Credits
 
-I searched very long and intensive for the solutions now built in this module. But I found some helpfull blogs other information on the internet and I like to mention them here.
+I searched very long and intensive for the solutions now built in this module. But I found some helpful blogs other information on the internet and I like to mention them here.
 
 The first and for me important post is from Alexander from his Kazun PowerShell blog:  
 [Managing Access-based enumeration with PowerShell](https://kazunposh.wordpress.com/2011/12/11/%D1%83%D0%BF%D1%80%D0%B0%D0%B2%D0%BB%D0%B5%D0%BD%D0%B8%D0%B5-access-based-enumeration-%D1%81-%D0%BF%D0%BE%D0%BC%D0%BE%D1%89%D1%8C%D1%8E-powershell/)
