@@ -12,9 +12,9 @@ All these functions use netapi32 or advapi32 dll calls.
 <br/><br/>
 ## Functions to work with network shares
 
-#### Get-NetShares [[-Server] \<string>] 
+#### Get-NetShares [[-Server] \<string>]  [[-Level] \<Int>]
 
-With this command you get a list of all shares on the machine or from a specified server.
+With this command you get a list of all shares on the machine or from a specified server. I you do not have admin rights you can try the option -Level 1.
 
 The returned array of objects will have the following properties:
 

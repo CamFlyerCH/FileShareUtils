@@ -559,12 +559,16 @@ Function Get-NetShares{
         .PARAMETER Server
             Computername on the network, local if left blank
 
+        .PARAMETER Level
+            NetShareEnum info level. Defaults 502, but you can use 1 for listing shares without admin rights
+
         .NOTES
             Name: Get-NetShares
             Author: Jean-Marc Ulrich
             Version History:
                 1.0 //First version 10.05.2018
                 1.1 //Changed to support servers with more than ~250 shares
+                1.2 //Added level parameter to list shares without admin rights
 
         .EXAMPLE
             Get-NetShares -Server 'srv1234'
@@ -576,7 +580,11 @@ Function Get-NetShares{
 	[CmdletBinding()]
     Param (
         [Parameter(Position=0,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
-        [string]$Server = ($env:computername).toLower()
+        [string]$Server = ($env:computername).toLower(),
+
+        [Parameter(Position=1,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [ValidateSet(502,1)]
+        [Int]$Level = 502
     )
     Begin {
         # We want to query the 502 datas
@@ -585,11 +593,15 @@ Function Get-NetShares{
 	    $total = 0
 	    $handle = 0
         $Shares = @()
-        $struct = New-Object Netapi+SHARE_INFO_502
+        If($Level -eq 1){
+            $struct = New-Object Netapi+SHARE_INFO_1
+        } else {
+            $struct = New-Object Netapi+SHARE_INFO_502
+        }
         $ReadFinished = $False
 
         While($ReadFinished -eq $False){
-            $return = [Netapi]::NetShareEnum($Server,502,[ref]$buffer,-1,[ref]$entries, [ref]$total,[ref]$handle) 
+            $return = [Netapi]::NetShareEnum($Server, $level,[ref]$buffer,-1,[ref]$entries, [ref]$total,[ref]$handle) 
 
             If($return -ne 0 -and $return -ne 234){
                Throw ("Error during NetShareEnum: " + (Get-NetAPIReturnInfo $return))
