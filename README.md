@@ -14,7 +14,7 @@ All these functions use netapi32 or advapi32 dll calls.
 
 #### Get-NetShares [[-Server] \<string>]  [[-Level] \<Int>]
 
-With this command you get a list of all shares on the machine or from a specified server. I you do not have admin rights you can try the option -Level 1.
+With this command you get a list of all shares on the machine or from a specified server. I you do not have admin rights you can try the option -Level 1  (Default is 502).
 
 The returned array of objects will have the following properties:
 
@@ -192,10 +192,28 @@ ConnectionType | This can be empty or showing the SMB version used (only with Le
 
 <br/>
 
-#### Get-NetOpenFiles [[-Server] \<string>] [[-Path] \<string>] 
+#### Close-NetSession [[-Server] \<string>] [-User] \<string> [-ClientIP] \<string>
+
+Closes an open session on a local or remote computer by user or client (IP seams to work). You have to specify a username or a client IP or both.
+
+The following parameters 
+
+Property | Description
+---------|----------
+Server | The machine hosting the sessions, default is the local machine
+User | The name of the user
+ClientIP | The IP address of the client (find out with Get-NetSessions)
+
+
+This function returns nothing.
+
+<br/>
+
+#### Get-NetOpenFiles [[-Server] \<string>] [[-Path] \<string>] -WithID \<switch>
 
 With this command you get a sorted (by path and user) list of all over SMB opened files on the machine or on a specified server.  
 By specifying the left part of the local path the list is filtered to this path and subfolders.
+By adding the option -WithID the returned values contain also a FileID that can be used to use Close-NetSession
 
 The returned array of objects will have the following properties:
 
@@ -204,7 +222,24 @@ Property | Description
 Path | Machine local path to the opened file or folder
 User | Username used to authenticate
 Access | Type of access
-Lock | Active locks by this access
+Locks | Active locks by this access
+FileID | ID of the open file (only with option -WithID)
+
+<br/>
+
+#### Close-NetOpenFiles [[-Server] \<string>] [-FileID] \<int>
+
+Closes an open session on a local or remote computer by user or client (IP seams to work). You have to specify a username or a client IP or both.
+
+The following parameters 
+
+Property | Description
+---------|----------
+Server | The machine hosting the sessions, default is the local machine
+**&#42; FileID** | FileID to close (Get the FileID by using Get-NetOpenFiles with the option -WithID)
+
+
+This function returns nothing.
 
 <br/><br/>
 

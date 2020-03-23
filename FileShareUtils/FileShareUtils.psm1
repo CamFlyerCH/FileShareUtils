@@ -220,6 +220,12 @@ public class Netapi
 		ref Int32 totalentries, 
 		ref Int32 resume_handle); 
 
+    [DllImport("Netapi32.dll", SetLastError=true)]
+    public static extern int NetSessionDel(
+        [MarshalAs(UnmanagedType.LPWStr)] string serverName,
+        [MarshalAs(UnmanagedType.LPWStr)] string UncClientName,
+        [MarshalAs(UnmanagedType.LPWStr)] string username);
+
 	[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     public struct FILE_INFO_2
     {
@@ -246,6 +252,9 @@ public class Netapi
 		ref Int32 entriesread, 
 		ref Int32 totalentries, 
 		ref Int32 resume_handle); 
+
+    [DllImport("Netapi32.dll", CharSet = CharSet.Unicode)]
+    public extern static int NetFileClose(string servername, int fileid);
 
 	[DllImport("advapi32.dll", CharSet = CharSet.Unicode)]
 	public static extern bool GetSecurityDescriptorDacl(
@@ -1414,7 +1423,7 @@ Function Get-NetSessions{
             Author: Jean-Marc Ulrich
             Version History:
                 1.0 //First version 11.05.2018
-                1.1 //First version 01.12.2018    Add level option
+                1.1 //Add level option 01.12.2018
 
             OUTPUT : Array of objects with Username,Client,ClientIP,Opens (open files),TimeTS (as timespan),Time (as string),Connected (as DateTime),IdleTS (as timespan),Idle (as string),IdleSince (as DateTime),ConnectionType
 
@@ -1502,6 +1511,60 @@ Function Get-NetSessions{
 }
 
 
+Function Close-NetSession{
+    <#
+        .SYNOPSIS
+            Force-closes an open session on a server
+
+        .DESCRIPTION
+            Closes an open session on a local or remote computer by user or client (IP seams to work)
+            by using the NetAPI32.dll (without WMI)
+
+        .PARAMETER Server
+            Computername on the network, local if left blank
+
+        .PARAMETER User
+            The user that sessions should be ended on the server
+
+        .PARAMETER ClientIP
+            The client that sessions should be ended on the server (IP Address)
+
+        .NOTES
+            Name: Close-NetSession
+            Author: Jean-Marc Ulrich
+            Version History:
+                1.0 //First version 23.03.2020
+
+        .EXAMPLE
+            Close-NetSession -Server 'srv1234' -User 'TestUser'
+
+            Description
+            -----------
+            Closes the open session(s) of user "TestUser" on server srv1234
+    #>
+	[CmdletBinding()]
+    Param (
+        [Parameter(Position=0,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [string]$Server = ($env:computername).toLower(),
+        [Parameter(Position=1,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [string]$User,
+        [Parameter(Position=2,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [string]$ClientIP
+    )
+    Begin {
+        If($ClientIP){
+            $ClientIPUNC = "\\" + $ClientIP
+        }
+
+        $return = [Netapi]::NetSessionDel($Server,$ClientIPUNC,$User)
+
+        If($return -ne 0){
+            Throw ("Error during NetSessionDel for user $User or/and client $ClientIP on $Server : " + (Get-NetAPIReturnInfo $return))
+        }
+    }
+}
+
+
 Function Get-NetOpenFiles{
     <#
         .SYNOPSIS
@@ -1515,15 +1578,22 @@ Function Get-NetOpenFiles{
             Computername on the network, local if left blank
 
         .PARAMETER Path
-            Beginning (left part) of a server local path to filter the results, if left undefined all open files are listed
+            Beginning (left part) of a server local path to filter the results, if left undefined no path filter is applied
+
+        .PARAMETER User
+            Username to filter the results, if left undefined all open files are listed, if left undefined no user filter is applied
+
+        .PARAMETER WithID
+            If this switch is set a FileID will also be returned
 
         .NOTES
             Name: Get-NetOpenFiles
             Author: Jean-Marc Ulrich
             Version History:
                 1.0 //First version 11.05.2018
+                1.1 //Added user filter and output of the FileID 23.03.2020
 
-            OUTPUT : Array of objects with Username,Client,Opens (open files),TimeTS (as timespan),Time (as string),Connected (as DateTime),IdleTS (as timespan),Idle (as string),IdleSince (as DateTime),ConnectionType
+            OUTPUT : Array of objects with Path, Username, Access Rights, Locks and optional the FileID
 
 
         .EXAMPLE
@@ -1537,8 +1607,12 @@ Function Get-NetOpenFiles{
     Param (
         [Parameter(Position=0,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
         [string]$Server = ($env:computername).toLower(),
-        [Parameter(Position=0,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
-        [string]$Path = $Null
+        [Parameter(Position=1,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [string]$Path = $Null,
+        [Parameter(Position=2,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [string]$User = $Null,
+        [Parameter(Position=3,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [switch]$WithID
     )
     Begin {
         $level = 3
@@ -1549,12 +1623,12 @@ Function Get-NetOpenFiles{
 	    $total = 0
 	    $handle = 0
 	    $Files = @()
-        $user = $null # for NetAPP compatibility
+        # $user = $null # for NetAPP compatibility
         $ReadFinished = $False
 
         While($ReadFinished -eq $False){
 
-            $return = [Netapi]::NetFileEnum($server,$path,$user,$level,[ref]$buffer,-1,[ref]$entries, [ref]$total,[ref]$handle) 
+            $return = [Netapi]::NetFileEnum($server,$path,$null,$level,[ref]$buffer,-1,[ref]$entries, [ref]$total,[ref]$handle) 
 
             If($return -ne 0 -and $return -ne 234){
                 Throw ("Error during NetFileEnum: " + (Get-NetAPIReturnInfo $return))
@@ -1582,8 +1656,17 @@ Function Get-NetOpenFiles{
                     default { $Access = "" }
                 }
 
-                $Files += $File | Select-Object Path,User,@{n='Access';e={$Access}},@{n='Locks';e={$File.NumLocks}}
+                If($User){
+                    If($File.User -ine $User){
+                        Continue
+                    }
+                }
 
+                If($WithID){
+                    $Files += $File | Select-Object Path,User,@{n='Access';e={$Access}},@{n='Locks';e={$File.NumLocks}},@{n='FileID';e={$File.FileID}}
+                } else {
+                    $Files += $File | Select-Object Path,User,@{n='Access';e={$Access}},@{n='Locks';e={$File.NumLocks}}
+                }
             }
         }
         
@@ -1592,5 +1675,50 @@ Function Get-NetOpenFiles{
         # Cleanup memory
         [Netapi]::NetApiBufferFree($buffer) | Out-Null
 
+    }
+}
+
+
+Function Close-NetOpenFiles{
+    <#
+        .SYNOPSIS
+            Force-closes an open path or file
+
+        .DESCRIPTION
+            Closes an open file or folder from a local or remote computer
+            by using the NetAPI32.dll (without WMI)
+
+        .PARAMETER Server
+            Computername on the network, local if left blank
+
+        .PARAMETER FileID
+            FileID to close (Get the FileID by using Get-NetOpenFiles with the option -WithID)
+
+        .NOTES
+            Name: Close-NetOpenFiles
+            Author: Jean-Marc Ulrich
+            Version History:
+                1.0 //First version 23.03.2020
+
+        .EXAMPLE
+            Close-NetOpenFiles -Server 'srv1234' -FileID 2751
+
+            Description
+            -----------
+            Closes the open file handle with the ID 2721 on server srv1234
+    #>
+	[CmdletBinding()]
+    Param (
+        [Parameter(Position=0,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [string]$Server = ($env:computername).toLower(),
+        [Parameter(Position=1,Mandatory=$True,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [Int]$FileID
+    )
+    Begin {
+        $return = [Netapi]::NetFileClose($Server,$FileID)
+
+        If($return -ne 0){
+            Throw ("Error during NetFileClose for $FileID on $Server : " + (Get-NetAPIReturnInfo $return))
+        }
     }
 }
