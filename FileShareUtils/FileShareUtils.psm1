@@ -254,7 +254,7 @@ public class Netapi
 		ref Int32 resume_handle); 
 
     [DllImport("Netapi32.dll", CharSet = CharSet.Unicode)]
-    public extern static int NetFileClose(string servername, int fileid);
+    public extern static int NetFileClose(string servername, uint fileid);
 
 	[DllImport("advapi32.dll", CharSet = CharSet.Unicode)]
 	public static extern bool GetSecurityDescriptorDacl(
@@ -664,7 +664,7 @@ Function Get-NetShares{
             }
         }
 
-        $Shares | Sort-Object Path
+        $Shares | Sort-Object Path,Name
 
         # Cleanup memory
         [Netapi]::NetApiBufferFree($buffer) | Out-Null
@@ -1068,7 +1068,7 @@ Function Set-NetShare{
 
         If($PSBoundParameters.ContainsKey('Permissions')){
             If($Permissions){
-                # Cenvert and sort given permissions
+                # Convert and sort given permissions
                 $NewACL = Convert-ACLTextToShareACL $Permissions
                 $NewShareACLText = Convert-ShareACLToText $NewACL $True
                 
@@ -1517,7 +1517,7 @@ Function Close-NetSession{
             Force-closes an open session on a server
 
         .DESCRIPTION
-            Closes an open session on a local or remote computer by user or client (IP seams to work)
+            Closes an open session on a local or remote computer by specifying user AND client IP
             by using the NetAPI32.dll (without WMI)
 
         .PARAMETER Server
@@ -1536,19 +1536,19 @@ Function Close-NetSession{
                 1.0 //First version 23.03.2020
 
         .EXAMPLE
-            Close-NetSession -Server 'srv1234' -User 'TestUser'
+            Close-NetSession -Server 'srv1234' -User 'TestUser' -ClientIP '11.22.33.44'
 
             Description
             -----------
-            Closes the open session(s) of user "TestUser" on server srv1234
+            Closes the open session(s) of user "TestUser" comming from IP 11.22.33.44 on server srv1234
     #>
 	[CmdletBinding()]
     Param (
         [Parameter(Position=0,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
         [string]$Server = ($env:computername).toLower(),
-        [Parameter(Position=1,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [Parameter(Position=1,Mandatory=$True,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
         [string]$User,
-        [Parameter(Position=2,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [Parameter(Position=2,Mandatory=$True,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
         [string]$ClientIP
     )
     Begin {
@@ -1559,7 +1559,7 @@ Function Close-NetSession{
         $return = [Netapi]::NetSessionDel($Server,$ClientIPUNC,$User)
 
         If($return -ne 0){
-            Throw ("Error during NetSessionDel for user $User or/and client $ClientIP on $Server : " + (Get-NetAPIReturnInfo $return))
+            Throw ("Error during NetSessionDel for user $User and client $ClientIP on $Server : " + (Get-NetAPIReturnInfo $return))
         }
     }
 }
@@ -1712,7 +1712,7 @@ Function Close-NetOpenFiles{
         [Parameter(Position=0,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
         [string]$Server = ($env:computername).toLower(),
         [Parameter(Position=1,Mandatory=$True,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
-        [Int]$FileID
+        [UInt32]$FileID
     )
     Begin {
         $return = [Netapi]::NetFileClose($Server,$FileID)

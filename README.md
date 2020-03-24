@@ -194,15 +194,15 @@ ConnectionType | This can be empty or showing the SMB version used (only with Le
 
 #### Close-NetSession [[-Server] \<string>] [-User] \<string> [-ClientIP] \<string>
 
-Closes an open session on a local or remote computer by user or client (IP seams to work). You have to specify a username or a client IP or both.
+Closes an open session on a local or remote computer by user AND client IP.
 
 The following parameters 
 
 Property | Description
 ---------|----------
 Server | The machine hosting the sessions, default is the local machine
-User | The name of the user
-ClientIP | The IP address of the client (find out with Get-NetSessions)
+**&#42; User** | The name of the user
+**&#42; ClientIP** | The IP address of the client (find out with Get-NetSessions)
 
 
 This function returns nothing.
@@ -213,7 +213,7 @@ This function returns nothing.
 
 With this command you get a sorted (by path and user) list of all over SMB opened files on the machine or on a specified server.  
 By specifying the left part of the local path the list is filtered to this path and subfolders.
-By adding the option -WithID the returned values contain also a FileID that can be used to use Close-NetSession
+By adding the option -WithID the returned values contain also a FileID that can be used to use Close-NetOpenFiles
 
 The returned array of objects will have the following properties:
 
@@ -229,7 +229,7 @@ FileID | ID of the open file (only with option -WithID)
 
 #### Close-NetOpenFiles [[-Server] \<string>] [-FileID] \<int>
 
-Closes an open session on a local or remote computer by user or client (IP seams to work). You have to specify a username or a client IP or both.
+Closes an open file or folder from a local or remote computer.
 
 The following parameters 
 
