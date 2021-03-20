@@ -5,7 +5,9 @@ Powershell module to help with all file sharing related tasks **without using WM
 The first functions help to view, list, create, modify and delete shares.  
 This also on remote Windows servers or NAS like NetApp.
 
-Also there are functions to view the open sessions and open files on a server
+Also there are functions to view the open sessions and open files on a server.
+
+Also there ae functions to list available snapshots and seek for folders and files (versions) in snapshots.
 
 All these functions use netapi32 or advapi32 dll calls.
 
@@ -294,11 +296,14 @@ The first and for me important post is from Alexander from his Kazun PowerShell 
 [Managing Access-based enumeration with PowerShell](https://kazunposh.wordpress.com/2011/12/11/%D1%83%D0%BF%D1%80%D0%B0%D0%B2%D0%BB%D0%B5%D0%BD%D0%B8%D0%B5-access-based-enumeration-%D1%81-%D0%BF%D0%BE%D0%BC%D0%BE%D1%89%D1%8C%D1%8E-powershell/)
 
 After testing the code above I found that using netapi32 seams to be the way to go. More search lead me to the blog of Micky Balladelli micky@balladelli.com .  
-* [Enumération de shares SMB](https://balladelli.com/enumeration-de-shares-smb/)  
-* [Netapi et Powershell](https://balladelli.com/netapi-et-powershell)  
-* [Les permissions d’un share](https://balladelli.com/les-permissions-dun-share/)
+[Enumération de shares SMB](https://balladelli.com/enumeration-de-shares-smb/)  
+[Netapi et Powershell](https://balladelli.com/netapi-et-powershell)  
+ [Les permissions d’un share](https://balladelli.com/les-permissions-dun-share/)
 
 Most important and cryptic parts to implement the netapi32 and advapi32 functions I borrowed from his code in these 3 blog posts.
 
+A long time I was looking into implementing functions to enumerate snapshots / previous versions. Many attemts to implement this in Powershell failed while I only found working C++ and C# examples from these repos :
+https://github.com/HiraokaHyperTools/EnumerateSnapshots
+https://github.com/HiraokaHyperTools/LibEnumRemotePreviousVersion
 
-
+Then I found this [Get-SnapshotPath](https://gist.github.com/jborean93/f60da33b08f8e1d5e0ef545b0a4698a0) Gist from Jordan Borean (@jborean93) <jborean93@gmail.com> that then finaly helped me to add the functions I wanted.

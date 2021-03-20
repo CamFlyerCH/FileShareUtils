@@ -1,17 +1,21 @@
 # PowerShell Module FileShareUtils from Jean-Marc Ulrich
 # https://github.com/CamFlyerCH/FileShareUtils
 #
-# Large parts of the used code where posted by 
+# Large parts of the used code where posted by
 # Micky Balladelli micky@balladelli.com on https://balladelli.com/category/smb/
-# and Alexander in his Kazun PowerShell blog https://kazunposh.wordpress.com/
+# Alexander in his Kazun PowerShell blog https://kazunposh.wordpress.com/
+# Jordan Borean https://gist.github.com/jborean93/f60da33b08f8e1d5e0ef545b0a4698a0
 
 # Code to access the netapi32, kernel32 and advapi32 functions
 Add-Type -TypeDefinition @" 
-using System; 
+using System;
 using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
+using System.IO;
+using System.Security.AccessControl;
 
-public class Netapi 
-{ 
+public class Netapi
+{
 	[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     public struct SHARE_INFO_0
     {
@@ -49,7 +53,7 @@ public class Netapi
 		public int MaxUses;
 		public int CurrentUses;
 		[MarshalAs(UnmanagedType.LPWStr)] public string Path;
-		[MarshalAs(UnmanagedType.LPWStr)] public string Password;		
+		[MarshalAs(UnmanagedType.LPWStr)] public string Password;
 		public int Reserved;
 		public IntPtr SecurityDescriptor;
     }
@@ -63,24 +67,24 @@ public class Netapi
 		public uint MaxUses;
 		public uint CurrentUses;
 		[MarshalAs(UnmanagedType.LPWStr)] public string Path;
-		[MarshalAs(UnmanagedType.LPWStr)] public string Password;		
-		[MarshalAs(UnmanagedType.LPWStr)] public string ServerName;		
+		[MarshalAs(UnmanagedType.LPWStr)] public string Password;
+		[MarshalAs(UnmanagedType.LPWStr)] public string ServerName;
 		public uint Reserved;
 		public IntPtr SecurityDescriptor;
     }
 
-	[DllImport("Netapi32.dll",CharSet=CharSet.Unicode)] 
+	[DllImport("Netapi32.dll",CharSet=CharSet.Unicode)]
     public static extern uint NetShareEnum(
 		[In,MarshalAs(UnmanagedType.LPWStr)] string server,
 		int level,
-		out IntPtr bufptr, 
+		out IntPtr bufptr,
 		int prefmaxlen,
-		ref Int32 entriesread, 
-		ref Int32 totalentries, 
-		ref Int32 resume_handle); 
+		ref Int32 entriesread,
+		ref Int32 totalentries,
+		ref Int32 resume_handle);
 
-	[DllImport("Netapi32.dll",CharSet=CharSet.Unicode)] 
-    public static extern int NetApiBufferFree(IntPtr buffer); 
+	[DllImport("Netapi32.dll",CharSet=CharSet.Unicode)]
+    public static extern int NetApiBufferFree(IntPtr buffer);
 
 	[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     public struct STAT_SERVER_0
@@ -149,13 +153,13 @@ public class Netapi
 	  public uint CurrentCommands;
     }
 
-	[DllImport("Netapi32.dll",CharSet=CharSet.Unicode)] 
+	[DllImport("Netapi32.dll",CharSet=CharSet.Unicode)]
     public static extern uint NetStatisticsGet(
 		[In,MarshalAs(UnmanagedType.LPWStr)] string server,
 		[In,MarshalAs(UnmanagedType.LPWStr)] string service,
 		int level,
 		int options,
-		out IntPtr bufptr); 
+		out IntPtr bufptr);
 
 	[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     public struct SESSION_INFO_0
@@ -208,17 +212,17 @@ public class Netapi
 		[MarshalAs(UnmanagedType.LPWStr)] public string Transport;
     }
 
-	[DllImport("Netapi32.dll",CharSet=CharSet.Unicode)] 
+	[DllImport("Netapi32.dll",CharSet=CharSet.Unicode)]
     public static extern uint NetSessionEnum(
 		[In,MarshalAs(UnmanagedType.LPWStr)] string server,
 		int client,
 		int user,
 		int level,
-		out IntPtr bufptr, 
+		out IntPtr bufptr,
 		int prefmaxlen,
-		ref Int32 entriesread, 
-		ref Int32 totalentries, 
-		ref Int32 resume_handle); 
+		ref Int32 entriesread,
+		ref Int32 totalentries,
+		ref Int32 resume_handle);
 
     [DllImport("Netapi32.dll", SetLastError=true)]
     public static extern int NetSessionDel(
@@ -241,17 +245,17 @@ public class Netapi
 		[MarshalAs(UnmanagedType.LPWStr)] public string User;
     }
 
-	[DllImport("Netapi32.dll",CharSet=CharSet.Unicode)] 
+	[DllImport("Netapi32.dll",CharSet=CharSet.Unicode)]
     public static extern uint NetFileEnum(
 		[In,MarshalAs(UnmanagedType.LPWStr)] string server,
 		[In,MarshalAs(UnmanagedType.LPWStr)] string path,
 		int user,
 		int level,
-		out IntPtr bufptr, 
+		out IntPtr bufptr,
 		int prefmaxlen,
-		ref Int32 entriesread, 
-		ref Int32 totalentries, 
-		ref Int32 resume_handle); 
+		ref Int32 entriesread,
+		ref Int32 totalentries,
+		ref Int32 resume_handle);
 
     [DllImport("Netapi32.dll", CharSet = CharSet.Unicode)]
     public extern static int NetFileClose(string servername, uint fileid);
@@ -271,7 +275,7 @@ public class Netapi
 		uint nAclInformationLength,
 		ACL_INFORMATION_CLASS dwAclInformationClass
 	);
- 
+
     [DllImport("advapi32.dll", CharSet = CharSet.Unicode)]
     public static extern int GetAce(
 		IntPtr aclPtr,
@@ -283,7 +287,7 @@ public class Netapi
     public static extern int GetLengthSid(
         IntPtr pSID
     );
-	
+
 	[DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool ConvertSidToStringSid(
@@ -352,7 +356,7 @@ public class Netapi
         Programs  = 0x20,
         None      = 0x30,
     }
- 
+
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     public struct SHARE_INFO_1005
     {
@@ -368,13 +372,13 @@ public class Netapi
         STYPE_DEVICE    = 0x00000002,   // Communications Device
         STYPE_IPC       = 0x00000003,   // InterProcess Communications
         STYPE_SPECIAL   = 0x80000000,   // Special share types (C$, ADMIN$, IPC$, etc)
-        STYPE_TEMPORARY = 0x40000000    // Temporary share 
+        STYPE_TEMPORARY = 0x40000000    // Temporary share
     }
- 
+
     public enum LogicalShareRights : uint
     {
         FullControl      = 0x001f01ff,
-        Read             = 0x001200a9, 
+        Read             = 0x001200a9,
         Change           = 0x001301bf
     }
 
@@ -384,7 +388,7 @@ public class Netapi
         [MarshalAs(UnmanagedType.LPWStr)] string netName,
         Int32 level,
         out IntPtr bufPtr );
- 
+
     [DllImport("Netapi32.dll", CharSet = CharSet.Unicode)]
     public static extern int NetShareSetInfo(
         [MarshalAs(UnmanagedType.LPWStr)] string serverName,
@@ -412,15 +416,91 @@ public class Netapi
         [MarshalAs(UnmanagedType.LPWStr)] string serverName,
         [MarshalAs(UnmanagedType.LPWStr)] string netName,
         Int32 reserved);
- 
+
+}
+
+namespace Win32
+{
+    public class NativeHelpers
+    {
+        [StructLayout(LayoutKind.Sequential)]
+        public struct IO_STATUS_BLOCK
+        {
+            public UInt32 Status;
+            public UInt32 Information;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct NT_Trans_Data
+        {
+            public UInt32 NumberOfSnapShots;
+            public UInt32 NumberOfSnapShotsReturned;
+            public UInt32 SnapShotArraySize;
+            // Omit SnapShotMultiSZ because we manually get that string based on the struct results
+        }
     }
-"@ 
+
+    public class NativeMethods
+    {
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        public static extern SafeFileHandle CreateFileW(
+            string lpFileName,
+            FileSystemRights dwDesiredAccess,
+            FileShare dwShareMode,
+            IntPtr lpSecurityAttributes,
+            FileMode dwCreationDisposition,
+            UInt32 dwFlagsAndAttributes,
+            IntPtr hTemplateFile);
+
+        [DllImport("ntdll.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        public static extern UInt32 NtFsControlFile(
+            SafeFileHandle hDevice,
+            IntPtr Event,
+            IntPtr ApcRoutine,
+            IntPtr ApcContext,
+            ref NativeHelpers.IO_STATUS_BLOCK IoStatusBlock,
+            UInt32 FsControlCode,
+            IntPtr InputBuffer,
+            UInt32 InputBufferLength,
+            IntPtr OutputBuffer,
+            UInt32 OutputBufferLength);
+
+        [DllImport("ntdll.dll")]
+        public static extern UInt32 RtlNtStatusToDosError(
+            UInt32 Status);
+    }
+}
+
+"@
 
 # Helper - Functions ===========================================================================
 
-Function Get-NetAPIReturnInfo($CallReturn){
-    ([ComponentModel.Win32Exception][Int32]$CallReturn).Message
-    #net helpmsg $CallReturn
+Function Get-LastWin32ExceptionMessage {
+    <#
+        .SYNOPSIS
+            Converts a Win32 Status Code to a more descriptive error message.
+
+        .PARAMETER ErrorCode
+            The Win32 Error Code to convert
+
+        .NOTES
+            Name: Get-LastWin32ExceptionMessage
+            Author: Jordan Borean (@jborean93) <jborean93@gmail.com>
+
+        .EXAMPLE
+            $LastError = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
+            Get-LastWin32Exception -ErrorCode $LastError
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory = $true)]
+        [System.Int32]
+        $ErrorCode
+    )
+
+    $Exp = New-Object -TypeName System.ComponentModel.Win32Exception -ArgumentList $ErrorCode
+    $ExpMsg = "{0} (Win32 ErrorCode {1} - 0x{1:X8})" -f $Exp.Message, $ErrorCode
+    return $ExpMsg
 }
 
 Function Get-DNSGet-DNSReverseLookup{
@@ -517,7 +597,7 @@ Function Convert-SDtoSDDL($ptr2SD,$SECURITY_INFORMATION){
     $sddllength = [IntPtr]::Zero
 	$return = [Netapi]::ConvertSecurityDescriptorToStringSecurityDescriptor($ptr2SD,$SDDL_REVISION_1,$SECURITY_INFORMATION,[ref]$sddlptr,[ref]$sddllength)
     If($return -ne $True){
-        Throw ("Error during ConvertSecurityDescriptorToStringSecurityDescriptor: " + (Get-NetAPIReturnInfo $return))
+        Throw ("Error during ConvertSecurityDescriptorToStringSecurityDescriptor: " + (Get-LastWin32ExceptionMessage $return))
     }
     $sddl = [System.Runtime.Interopservices.Marshal]::PtrToStringAuto($sddlptr)
     $sddl
@@ -549,6 +629,100 @@ Function Convert-SDDLToACL {
     }
 }
 
+Function Invoke-EnumerateSnapshots {
+    <#
+        .SYNOPSIS
+            Invokes NtFsControlFile with the handle and buffer size specified.
+
+        .DESCRIPTION
+            This cmdlet is defined to invoke NtFsControlFile with the
+            FSCTL_SRV_ENUMERATE_SNAPSHOTS control code.
+
+        .PARAMETER Handle
+            A SafeFileHandle of the opened UNC path. This should be retrieved with
+            CreateFileW.
+
+        .PARAMETER BufferSize
+            The buffer size to initialise the output buffer. This should be a minimum
+            of ([System.Runtime.InteropServices.Marshal]::SizeOf([Type][Win32.NativeHelpers+NT_Trans_Data]) + 4).
+            See Examples on how to invoke this
+
+        .PARAMETER ScriptBlock
+            The script block to invoke after the raw output buffer is converted to the
+            NT_Trans_Data structure.
+
+        .NOTES
+            Name: Invoke-EnumerateSnapshots
+            Author: Jordan Borean (@jborean93) <jborean93@gmail.com>
+            OUTPUT : Array of strings with the full snapshot paths
+
+        .EXAMPLE
+            $BufferSize = [System.Runtime.InteropServices.Marshal]::SizeOf([Type][Win32.NativeHelpers+NT_Trans_Data]) + 4)
+            Invoke-EnumerateSnapshots -Handle $Handle -BufferSize $BufferSize -ScriptBlock {
+                $TransactionData = $args[1]
+
+                if ($TransactionData.NumberOfSnapShots -gt 0) {
+                    $NewBufferSize = $BufferSize + $TransactionData.SnapShotArraySize
+
+                    Invoke-EnumerateSnapshots -Handle $Handle -BufferSize $NewBufferSize -ScriptBlock {
+                        $OutBuffer = $args[0]
+                        $TransactionData = $args[1]
+
+                        $SnapshotPtr = [System.IntPtr]::Add($OutBuffer, $TransDataSize)
+                        $SnapshotString = [System.Runtime.InteropServices.Marshal]::PtrToStringUni($SnapshotPtr,
+                            $TransactionData.SnapShotArraySize / 2)
+
+                        $SnapshotString.Split([char[]]@("`0"), [System.StringSplitOptions]::RemoveEmptyEntries)
+                    }
+                }
+            }
+    #>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory = $true)]
+        [Microsoft.Win32.SafeHandles.SafeFileHandle]
+        $Handle,
+
+        [Parameter(Mandatory = $true)]
+        [System.Int32]
+        $BufferSize,
+
+        [Parameter(Mandatory = $true)]
+        [ScriptBlock]
+        $ScriptBlock
+    )
+
+    # Allocate new memory based on the buffer size
+    $OutBuffer = [System.Runtime.InteropServices.Marshal]::AllocHGlobal($BufferSize)
+    try {
+        $IOBlock = New-Object -TypeName Win32.NativeHelpers+IO_STATUS_BLOCK
+
+        # Call NtFsControlFile with the handle and FSCTL_SRV_ENUMERATE_SNAPSHOTS code
+        $Result = [Win32.NativeMethods]::NtFsControlFile($Handle, [System.IntPtr]::Zero, [System.IntPtr]::Zero,
+            [System.IntPtr]::Zero, [Ref]$IOBlock, 0x00144064, [System.IntPtr]::Zero, 0, $OutBuffer, $BufferSize)
+
+        if ($Result -ne 0) {
+            # If the result was not 0 we need to convert the NTSTATUS code to a Win32 code
+            $Win32Error = [Win32.NativeMethods]::RtlNtStatusToDosError($Result)
+            $Msg = Get-LastWin32ExceptionMessage -ErrorCode $Win32Error
+            Write-Error -Message "NtFsControlFile failed - $Msg"
+            return
+        }
+
+        # Convert the OutBuffer pointer to a NT_Trans_Data structure
+        $TransactionData = [System.Runtime.InteropServices.Marshal]::PtrToStructure(
+            $OutBuffer,
+            [Type][Win32.NativeHelpers+NT_Trans_Data]
+        )
+
+        # Invoke out script block that parses the data and outputs whatever it needs. We pass in both the
+        # OutBuffer and TransactionData as arguments
+        &$ScriptBlock $OutBuffer $TransactionData
+    } finally {
+        # Make sure we free the unmanaged memory
+        [System.Runtime.InteropServices.Marshal]::FreeHGlobal($OutBuffer)
+    }
+}
 
 
 
@@ -610,10 +784,10 @@ Function Get-NetShares{
         $ReadFinished = $False
 
         While($ReadFinished -eq $False){
-            $return = [Netapi]::NetShareEnum($Server, $level,[ref]$buffer,-1,[ref]$entries, [ref]$total,[ref]$handle) 
+            $return = [Netapi]::NetShareEnum($Server, $level,[ref]$buffer,-1,[ref]$entries, [ref]$total,[ref]$handle)
 
             If($return -ne 0 -and $return -ne 234){
-               Throw ("Error during NetShareEnum: " + (Get-NetAPIReturnInfo $return))
+               Throw ("Error during NetShareEnum: " + (Get-LastWin32ExceptionMessage $return))
             }
 
             If($entries -eq $total -and $return -eq 0){$ReadFinished = $True}
@@ -626,7 +800,7 @@ Function Get-NetShares{
                 # Define output object
 	            $Share = New-Object -TypeName PSObject
                 $ptr = New-Object system.Intptr -ArgumentList $offset
-	            
+
                 $str502 = [system.runtime.interopservices.marshal]::PtrToStructure($ptr, [System.Type]$struct.GetType())
 			    $offset = $ptr.ToInt64()
 	            $offset += $increment
@@ -717,7 +891,7 @@ Function Get-NetShare{
         If($return -eq 0){
             $str502 = [System.Runtime.InteropServices.Marshal]::PtrToStructure($bufptr,[System.Type]$struct.GetType())
         } Else {
-            Throw ("Error during NetShareGetInfo for $Name : " + (Get-NetAPIReturnInfo $return))
+            Throw ("Error during NetShareGetInfo for $Name : " + (Get-LastWin32ExceptionMessage $return))
         }
 
         # Now read the flags
@@ -728,7 +902,7 @@ Function Get-NetShare{
         If($return -eq 0){
             $str1005 = [System.Runtime.InteropServices.Marshal]::PtrToStructure($bufptr,[System.Type]$struct.GetType())
         } Else {
-            Throw ("Error during NetShareGetInfo 1005: " + (Get-NetAPIReturnInfo $return))
+            Throw ("Error during NetShareGetInfo 1005: " + (Get-LastWin32ExceptionMessage $return))
         }
 
         # Define output object
@@ -748,10 +922,10 @@ Function Get-NetShare{
         } Else {
             $Share | Add-Member ABE "Disabled"
         }
-        
+
         # Offline (client side caching) configuration
         $Share | Add-Member CachingMode ([enum]::GetValues([Netapi+CacheType]) | Where-Object {$_.value__ -eq ($ShareFlags -band 0x0030)})
-        
+
         # Prepare to read ACL
 	    If ($str502.SecurityDescriptor -ne 0){
 
@@ -775,7 +949,7 @@ Function Get-NetShare{
         } Else {
             $Share | Add-Member BranchCache "Disabled"
         }
-        
+
         $Share | Add-Member Flags $ShareFlags
 
         # Get the type
@@ -829,7 +1003,7 @@ Function Get-NetFileShares{
     Param (
         [Parameter(Position=0,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
         [string]$Server = ($env:computername).toLower()
-    )    
+    )
     Begin {
         $FileShareList = Get-NetShares -Server $Server | Sort-Object Server,Path,Name
 
@@ -864,7 +1038,7 @@ Function New-NetShare{
             The description/remark of the share
 
         .PARAMETER Permissions
-            Permissions on the share itself. Speical format: Every permission is seperated by a comma and the identity and the access right are seperated by a |
+            Permissions on the share itself. Special format: Every permission is seperated by a comma and the identity and the access right are seperated by a |
             Default: Everyone|FullControl
             Possible Permissions: Read, Change, FullControl, Deny-FullControl
             Possible Identities: Everyone, BUILTIN\Administrators, BUILTIN\Users, BUILTIN\xxxxx (server local users or groups), DOMAIN\UserName, ADCORP\GroupName, <NETBIOSDOMAINNAME>\<sAMAccountName> (domain objects)
@@ -940,7 +1114,7 @@ Function New-NetShare{
         [Netapi]::NetApiBufferFree($bufptr) | Out-Null
 
         If($return -ne 0){
-            Throw ("Error during NetShareAdd: " + (Get-NetAPIReturnInfo $return))
+            Throw ("Error during NetShareAdd: " + (Get-LastWin32ExceptionMessage $return))
         }
 
         $return = Set-NetShare -Server $Server -Name $Name -Description $Description -Permissions $Permissions -ABE $ABE -CachingMode $CachingMode -MaxUses $MaxUses
@@ -967,7 +1141,7 @@ Function Set-NetShare{
             The description/remark of the share
 
         .PARAMETER Permissions
-            Permissions on the share itself. Speical format: Every permission is seperated by a comma and the identity and the access right are seperated by a |
+            Permissions on the share itself. Special format: Every permission is seperated by a comma and the identity and the access right are seperated by a |
             Default: Everyone|FullControl
             Possible Permissions: Read, Change, FullControl, Deny-FullControl
             Possible Identities: Everyone, BUILTIN\Administrators, BUILTIN\Users, BUILTIN\xxxxx (server local users or groups), DOMAIN\UserName, ADCORP\GroupName, <NETBIOSDOMAINNAME>\<sAMAccountName> (domain objects)
@@ -1031,7 +1205,7 @@ Function Set-NetShare{
         If($return -eq 0){
             $str502 = [System.Runtime.InteropServices.Marshal]::PtrToStructure($bufptr502,[System.Type]$struct502.GetType())
         } Else {
-            Throw ("Error during NetShareGetInfo for $Name on $Server : " + (Get-NetAPIReturnInfo $return))
+            Throw ("Error during NetShareGetInfo for $Name on $Server : " + (Get-LastWin32ExceptionMessage $return))
         }
 
         # Now read the flags
@@ -1042,7 +1216,7 @@ Function Set-NetShare{
         If($return -eq 0){
             $str1005 = [System.Runtime.InteropServices.Marshal]::PtrToStructure($bufptr1005,[System.Type]$struct1005.GetType())
         } Else {
-            Throw ("Error during NetShareGetInfo 1005 for $Name on $Server : " + (Get-NetAPIReturnInfo $return))
+            Throw ("Error during NetShareGetInfo 1005 for $Name on $Server : " + (Get-LastWin32ExceptionMessage $return))
         }
         $ShareFlags = $str1005.shi1005_flags
 
@@ -1071,7 +1245,7 @@ Function Set-NetShare{
                 # Convert and sort given permissions
                 $NewACL = Convert-ACLTextToShareACL $Permissions
                 $NewShareACLText = Convert-ShareACLToText $NewACL $True
-                
+
                 If ($str502.SecurityDescriptor -ne 0){
 
                     $ShareACLSSDL = Convert-SDtoSDDL $str502.SecurityDescriptor 4 # 15 or 4
@@ -1089,7 +1263,7 @@ Function Set-NetShare{
                     $NewSDsize = [IntPtr]::Zero
                     $return = [Netapi]::ConvertStringSecurityDescriptorToSecurityDescriptor($sddlptr,$SDDL_REVISION_1,[ref]$NewSDptr,[ref]$NewSDsize)
                     If($return -ne $True){
-                        Throw ("Error during ConvertStringSecurityDescriptorToSecurityDescriptor: " + (Get-NetAPIReturnInfo $return))
+                        Throw ("Error during ConvertStringSecurityDescriptorToSecurityDescriptor: " + (Get-LastWin32ExceptionMessage $return))
                     }
 
                     $str502.SecurityDescriptor = $NewSDptr
@@ -1108,7 +1282,7 @@ Function Set-NetShare{
             $return = [Netapi]::NetShareSetInfo($Server,$Name,502,$bufptr,$paramerror)
 
             If($return -ne 0){
-                Throw ("Error during NetShareSetInfo 502: " + (Get-NetAPIReturnInfo $return))
+                Throw ("Error during NetShareSetInfo 502: " + (Get-LastWin32ExceptionMessage $return))
             }
         }
 
@@ -1145,7 +1319,7 @@ Function Set-NetShare{
             [Netapi]::NetApiBufferFree($bufptr) | Out-Null
 
             If($return -ne 0){
-                Throw ("Error during NetShareSetInfo 1005: " + (Get-NetAPIReturnInfo $return))
+                Throw ("Error during NetShareSetInfo 1005: " + (Get-LastWin32ExceptionMessage $return))
             }
         }
 
@@ -1178,7 +1352,7 @@ Function Redo-NetShare{
             The description/remark of the share
 
         .PARAMETER Permissions
-            Permissions on the share itself. Speical format: Every permission is seperated by a comma and the identity and the access right are seperated by a |
+            Permissions on the share itself. Special format: Every permission is seperated by a comma and the identity and the access right are seperated by a |
             Default: Everyone|FullControl
             Possible Permissions: Read, Change, FullControl, Deny-FullControl
             Possible Identities: Everyone, BUILTIN\Administrators, BUILTIN\Users, BUILTIN\xxxxx (server local users or groups), DOMAIN\UserName, ADCORP\GroupName, <NETBIOSDOMAINNAME>\<sAMAccountName> (domain objects)
@@ -1273,6 +1447,7 @@ Function Redo-NetShare{
         } Else {
             $return = New-NetShare -Server $Server -Name $Name -Path $Path -Description $Description -Permissions $Permissions -ABE $ABE -CachingMode $CachingMode -MaxUses $MaxUses
         }
+        $return = $return
     }
 }
 
@@ -1317,7 +1492,7 @@ Function Remove-NetShare{
         $return = [Netapi]::NetShareDel($Server,$Name,$reserved)
 
         If($return -ne 0){
-            Throw ("Error during NetShareDel for $Name on $Server : " + (Get-NetAPIReturnInfo $return))
+            Throw ("Error during NetShareDel for $Name on $Server : " + (Get-LastWin32ExceptionMessage $return))
         }
     }
 }
@@ -1441,13 +1616,20 @@ Function Get-NetSessions{
         [string]$Server = ($env:computername).toLower(),
 
         [Parameter(Position=1,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
-        [ValidateSet(502,1)]
+        [ValidateSet(502,10,1,0)]
         [Int]$Level = 502
     )
     Begin {
+        If($Level -eq 0){
+            $struct = New-Object netapi+SESSION_INFO_0
+        }
         If($Level -eq 1){
             $struct = New-Object netapi+SESSION_INFO_1
-        } else {
+        }
+        If($Level -eq 10){
+            $struct = New-Object netapi+SESSION_INFO_10
+        }
+        If($Level -eq 502){
             $struct = New-Object netapi+SESSION_INFO_502
         }
 
@@ -1462,11 +1644,11 @@ Function Get-NetSessions{
         $ReadFinished = $False
 
         While($ReadFinished -eq $False){
-        
+
             $return = [Netapi]::NetSessionEnum($server, $client, $user, $level,[ref]$buffer, -1,[ref]$entries, [ref]$total,[ref]$handle)
 
             If($return -ne 0 -and $return -ne 234){
-                Throw ("Error during NetSessionEnum: " + (Get-NetAPIReturnInfo $return))
+                Throw ("Error during NetSessionEnum: " + (Get-LastWin32ExceptionMessage $return))
             }
 
             If($entries -eq $total -and $return -eq 0){$ReadFinished = $True}
@@ -1481,7 +1663,7 @@ Function Get-NetSessions{
 
                 $offset = $ptr.ToInt64()
                 $offset += $increment
-                
+
                 $ClientIP = $session.Name
                 # Resolve hostname
                 $Clientname = Get-DNSGet-DNSReverseLookup $Session.Name
@@ -1497,7 +1679,7 @@ Function Get-NetSessions{
                 If($Level -eq 1){
                     $Sessions += $Session | Select-Object -Property Username,@{n='Client';e={$Clientname}},@{n='ClientIP';e={$ClientIP}},@{n='Opens';e={$_.NumOpens}},@{n='TimeTS';e={$TimeTS}},@{n='Time';e={$Time}},@{n='Connected';e={$Connected}},@{n='IdleTS';e={$IdleTS}},@{n='Idle';e={$Idle}},@{n='IdleSince';e={$IdleSince}}
                 } else {
-                    $Sessions += $Session | Select-Object -Property Username,@{n='Client';e={$Clientname}},@{n='ClientIP';e={$ClientIP}},@{n='Opens';e={$_.NumOpens}},@{n='TimeTS';e={$TimeTS}},@{n='Time';e={$Time}},@{n='Connected';e={$Connected}},@{n='IdleTS';e={$IdleTS}},@{n='Idle';e={$Idle}},@{n='IdleSince';e={$IdleSince}},ConnectionType 
+                    $Sessions += $Session | Select-Object -Property Username,@{n='Client';e={$Clientname}},@{n='ClientIP';e={$ClientIP}},@{n='Opens';e={$_.NumOpens}},@{n='TimeTS';e={$TimeTS}},@{n='Time';e={$Time}},@{n='Connected';e={$Connected}},@{n='IdleTS';e={$IdleTS}},@{n='Idle';e={$Idle}},@{n='IdleSince';e={$IdleSince}},ConnectionType
                 }
             }
         }
@@ -1559,7 +1741,7 @@ Function Close-NetSession{
         $return = [Netapi]::NetSessionDel($Server,$ClientIPUNC,$User)
 
         If($return -ne 0){
-            Throw ("Error during NetSessionDel for user $User and client $ClientIP on $Server : " + (Get-NetAPIReturnInfo $return))
+            Throw ("Error during NetSessionDel for user $User and client $ClientIP on $Server : " + (Get-LastWin32ExceptionMessage $return))
         }
     }
 }
@@ -1616,7 +1798,7 @@ Function Get-NetOpenFiles{
     )
     Begin {
         $level = 3
-        $struct = New-Object netapi+FILE_INFO_3 
+        $struct = New-Object netapi+FILE_INFO_3
 
 	    $buffer = 0
 	    $entries = 0
@@ -1628,10 +1810,10 @@ Function Get-NetOpenFiles{
 
         While($ReadFinished -eq $False){
 
-            $return = [Netapi]::NetFileEnum($server,$path,$null,$level,[ref]$buffer,-1,[ref]$entries, [ref]$total,[ref]$handle) 
+            $return = [Netapi]::NetFileEnum($server,$path,$null,$level,[ref]$buffer,-1,[ref]$entries, [ref]$total,[ref]$handle)
 
             If($return -ne 0 -and $return -ne 234){
-                Throw ("Error during NetFileEnum: " + (Get-NetAPIReturnInfo $return))
+                Throw ("Error during NetFileEnum: " + (Get-LastWin32ExceptionMessage $return))
             }
 
             If($entries -eq $total -and $return -eq 0){$ReadFinished = $True}
@@ -1669,7 +1851,7 @@ Function Get-NetOpenFiles{
                 }
             }
         }
-        
+
 	    $Files | Sort-Object Path,User
 
         # Cleanup memory
@@ -1718,7 +1900,212 @@ Function Close-NetOpenFiles{
         $return = [Netapi]::NetFileClose($Server,$FileID)
 
         If($return -ne 0){
-            Throw ("Error during NetFileClose for $FileID on $Server : " + (Get-NetAPIReturnInfo $return))
+            Throw ("Error during NetFileClose for $FileID on $Server : " + (Get-LastWin32ExceptionMessage $return))
+        }
+    }
+}
+
+Function Get-SnapshotPath{
+    <#
+        .SYNOPSIS
+            Get all VSS snapshot paths for the path specified.
+
+        .DESCRIPTION
+            Scans the UNC or Local path for a list of VSS snapshots and the path that
+            can be used to reach these files.
+
+        .PARAMETER Path
+            The UNC or mapped drive path to search.
+
+        .NOTES
+            Name: Get-SnapshotPath
+            Author: Jordan Borean (@jborean93) <jborean93@gmail.com>
+            OUTPUT : Array of strings with the full snapshot paths
+
+        .EXAMPLE
+            Get-SnapshotPath -Path \\server\share
+            Get-SnapshotPath -Path C:\Windows
+    #>
+    [CmdletBinding()]
+    Param (
+        [Parameter(Mandatory = $true)]
+        [System.String]
+        $Path
+    )
+
+    If (-not (Test-Path -LiteralPath $Path)) {
+        Write-Error -Message "Could not find UNC path '$Path'" -Category ObjectNotFound
+        return
+    }
+
+    # Create a SafeFileHandle of the path specified and make sure it is valid
+    $Handle = [Win32.NativeMethods]::CreateFileW(
+        $Path,
+        [System.Security.AccessControl.FileSystemRights]"ListDirectory, ReadAttributes, Synchronize",
+        [System.IO.FileShare]::ReadWrite,
+        [System.IntPtr]::Zero,
+        [System.IO.FileMode]::Open,
+        0x02000000,  # FILE_FLAG_BACKUP_SEMANTICS
+        [System.IntPtr]::Zero
+    )
+    if ($Handle.IsInvalid) {
+        $LastError = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
+        $Msg = Get-LastWin32ExceptionMessage -ErrorCode $LastError
+        Write-Error -Message "CreateFileW($Path) failed - $Msg"
+        return
+    }
+
+    try {
+        # Set the initial buffer size to the size of NT_Trans_Data + 2 chars. We do this so we can get the actual buffer
+        # size that is contained in the NT_Trans_Data struct. A char is 2 bytes (UTF-16) and we expect 2 of them
+        $TransDataSize = [System.Runtime.InteropServices.Marshal]::SizeOf([Type][Win32.NativeHelpers+NT_Trans_Data])
+        $BufferSize = $TransDataSize + 4
+
+        # Invoke NtFsControlFile at least once to get the number of snapshots and total size of the NT_Trans_Data
+        # buffer. If there are 1 or more snapshots we invoke it again to get the actual snapshot strings
+        Invoke-EnumerateSnapshots -Handle $Handle -BufferSize $BufferSize -ScriptBlock {
+            $TransactionData = $args[1]
+
+            if ($TransactionData.NumberOfSnapShots -gt 0) {
+                # There are snapshots to retrieve, reset the buffer size to the original size + the return array size
+                $NewBufferSize = $BufferSize + $TransactionData.SnapShotArraySize
+
+                # Invoke NtFsControlFile with the larger buffer size but now we can parse the NT_Trans_Data
+                Invoke-EnumerateSnapshots -Handle $Handle -BufferSize $NewBufferSize -ScriptBlock {
+                    $OutBuffer = $args[0]
+                    $TransactionData = $args[1]
+
+                    $SnapshotPtr = [System.IntPtr]::Add($OutBuffer, $TransDataSize)
+                    $SnapshotString = [System.Runtime.InteropServices.Marshal]::PtrToStringUni($SnapshotPtr,
+                        $TransactionData.SnapShotArraySize / 2)
+
+                    Write-Output -InputObject ($SnapshotString.Split([char[]]@("`0"), [System.StringSplitOptions]::RemoveEmptyEntries))
+                }
+            }
+        } | ForEach-Object -Process { Join-Path -Path $Path -ChildPath $_ }
+    } finally {
+        # Technically not needed as a SafeFileHandle will auto dispose once the GC is called but it's good to be
+        # explicit about these things
+        $Handle.Dispose()
+    }
+}
+
+Function Get-SnapshotItems{
+    <#
+        .SYNOPSIS
+            Retrieves all previous versions of a folder or file
+
+        .DESCRIPTION
+            Retrieves file or folder items of previous versions of a given object including a timestamp when the snapshot was taken
+
+        .PARAMETER Path
+            The UNC or mapped drive path to search.
+
+        .NOTES
+            Name: Get-SnapshotItems
+            Author: Jean-Marc Ulrich
+            Version History:
+                1.0 //First version 20.03.2021
+
+            OUTPUT : Array of file or folder objects with additional value SnapshotCreatedTime
+
+
+        .EXAMPLE
+            Get-SnapshotItems -Path "\\FileServer001\data\Org"
+
+            Description
+            -----------
+            Gets a list of available snapshots of the folder
+    #>
+	[CmdletBinding()]
+    Param (
+        [Parameter(Position=0,Mandatory=$True,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [string]$Path
+    )
+    Begin {
+        $SnapshotsFolders = @()
+
+        # Check if the given path item exists now
+        Try{
+            $SourceItem = Get-Item -LiteralPath $Path -ErrorAction Stop
+            $SearchMode = $False
+
+            # Check if path given is a folder or a file that makes search more complicated
+            IF($SourceItem.PSIsContainer){
+                $FolderPath = $SourceItem.FullName
+                $SourceFile = $NULL
+            } Else {
+                # Prepare file search
+                $FolderPath = Split-Path ($SourceItem.FullName) -Parent
+                $SourceFile = $SourceItem
+                $LastVersionDate = $SourceItem.LastWriteTimeUtc
+            }
+        } Catch {
+            $FolderPath = $Path
+            $SearchMode = $True
+
+            #Searching existing parent folder
+            While(!$SearchPath){
+                $FolderPath = Split-Path $FolderPath -Parent
+                $SourceItem = Get-Item -LiteralPath $FolderPath -ErrorAction SilentlyContinue
+
+                If($SourceItem){
+                    $SearchPath = $Path.Replace($FolderPath,'')
+                }
+            }
+        }
+
+        # Use Get-SnapshotPath to get full path of existing Snapshots
+        $SnapPaths = Get-SnapshotPath -Path $FolderPath
+
+        # Get item for each result
+        ForEach($SnapPath in $SnapPaths){
+            $FolderObj = Get-Item -LiteralPath $SnapPath
+            $SnapshotDateTime = [datetime]::parseexact($FolderObj.Name, '@GMT-yyyy.MM.dd-HH.mm.ss', $null)
+            $SnapshotsFolders += $FolderObj | Select-Object *,@{n='SnapshotCreatedTime';e={$SnapshotDateTime}}
+        }
+
+        # Search mode needs to check each snapshot for given path
+        If($SearchMode){
+            $TempResult = @()
+
+            # look for search path or file in every snapshot of this share
+            ForEach($SnapshotsFolder in $SnapshotsFolders){
+                $TestItem = Get-Item -LiteralPath ($SnapshotsFolder.FullName + $SearchPath) -ErrorAction SilentlyContinue
+
+                IF($TestItem){
+                    IF($TestItem.PSIsContainer){
+                        $TempResult += $TestItem | Select-Object *,@{n='SnapshotCreatedTime';e={$SnapshotsFolder.SnapshotCreatedTime}}
+                    } Else {
+                        $TempResult += Get-Item -LiteralPath (Split-Path ($SnapshotsFolder.FullName + $SearchPath) -Parent) -ErrorAction SilentlyContinue | Select-Object *,@{n='SnapshotCreatedTime';e={$SnapshotsFolder.SnapshotCreatedTime}}
+                        $SourceFile = $TestItem
+                    }
+                }
+            }
+            $SnapshotsFolders = $TempResult
+        }
+
+        # If the item of intrest is or used to be a file ...
+        If($SourceFile){
+
+            # Check every file version
+            ForEach($SnapshotsFolder in $SnapshotsFolders){
+                Try{
+                    $TestFile = Get-Item -LiteralPath ($SnapshotsFolder.FullName + "\" + $SourceFile.Name) -ErrorAction SilentlyContinue
+                } Catch {
+                    $error.clear()
+                    Continue
+                }
+
+                # Compare Modify dates
+                If($LastVersionDate -ne $TestFile.LastWriteTimeUtc){
+                    $TestFile | Select-Object *,@{n='SnapshotCreatedTime';e={$SnapshotsFolder.SnapshotCreatedTime}}
+                    $LastVersionDate = $TestFile.LastWriteTimeUtc
+                }
+            }
+
+        } Else {
+            $SnapshotsFolders
         }
     }
 }
