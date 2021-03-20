@@ -243,6 +243,33 @@ Server | The machine hosting the sessions, default is the local machine
 
 This function returns nothing.
 
+<br/>
+
+#### Get-SnapshotPath [[-Path] \<string>]
+
+With this command will return you every snapshot (path) for a given folder (on a network share).
+
+The returned array of strings will contain the full path to the snapshots of the given folders.
+
+<br/>
+
+#### Get-SnapshotItems [[-Path] \<string>]
+
+With this command will return file or folder objects found existing in snapshots for a given full path to a folder or file.
+The folder/file does not need to exist at the present location. For folders every existing snapshot is listed. 
+For files only older versions are returned.
+
+The returned array of objects will be of the type DirectoryInfo or FileInfo
+with the additional property SnapshotCreationTime (in DateTime format).
+
+Most usefull properties: 
+
+Property | Description
+---------|----------
+FullName | Full path to the object
+LastWriteTime | Last modify date of the object
+SnapshotCreationTime | Time (local) the snapshot was taken
+
 <br/><br/>
 
 ## Installation

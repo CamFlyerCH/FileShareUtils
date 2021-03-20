@@ -2007,7 +2007,7 @@ Function Get-SnapshotItems{
             Version History:
                 1.0 //First version 20.03.2021
 
-            OUTPUT : Array of file or folder objects with additional value SnapshotCreatedTime
+            OUTPUT : Array of file or folder objects with additional value SnapshotCreationTime
 
 
         .EXAMPLE
@@ -2062,7 +2062,7 @@ Function Get-SnapshotItems{
         ForEach($SnapPath in $SnapPaths){
             $FolderObj = Get-Item -LiteralPath $SnapPath
             $SnapshotDateTime = [datetime]::parseexact($FolderObj.Name, '@GMT-yyyy.MM.dd-HH.mm.ss', $null)
-            $SnapshotsFolders += $FolderObj | Select-Object *,@{n='SnapshotCreatedTime';e={$SnapshotDateTime}}
+            $SnapshotsFolders += $FolderObj | Select-Object *,@{n='SnapshotCreationTime';e={$SnapshotDateTime}}
         }
 
         # Search mode needs to check each snapshot for given path
@@ -2075,9 +2075,9 @@ Function Get-SnapshotItems{
 
                 IF($TestItem){
                     IF($TestItem.PSIsContainer){
-                        $TempResult += $TestItem | Select-Object *,@{n='SnapshotCreatedTime';e={$SnapshotsFolder.SnapshotCreatedTime}}
+                        $TempResult += $TestItem | Select-Object *,@{n='SnapshotCreationTime';e={$SnapshotsFolder.SnapshotCreationTime}}
                     } Else {
-                        $TempResult += Get-Item -LiteralPath (Split-Path ($SnapshotsFolder.FullName + $SearchPath) -Parent) -ErrorAction SilentlyContinue | Select-Object *,@{n='SnapshotCreatedTime';e={$SnapshotsFolder.SnapshotCreatedTime}}
+                        $TempResult += Get-Item -LiteralPath (Split-Path ($SnapshotsFolder.FullName + $SearchPath) -Parent) -ErrorAction SilentlyContinue | Select-Object *,@{n='SnapshotCreationTime';e={$SnapshotsFolder.SnapshotCreationTime}}
                         $SourceFile = $TestItem
                     }
                 }
@@ -2099,7 +2099,7 @@ Function Get-SnapshotItems{
 
                 # Compare Modify dates
                 If($LastVersionDate -ne $TestFile.LastWriteTimeUtc){
-                    $TestFile | Select-Object *,@{n='SnapshotCreatedTime';e={$SnapshotsFolder.SnapshotCreatedTime}}
+                    $TestFile | Select-Object *,@{n='SnapshotCreationTime';e={$SnapshotsFolder.SnapshotCreationTime}}
                     $LastVersionDate = $TestFile.LastWriteTimeUtc
                 }
             }
