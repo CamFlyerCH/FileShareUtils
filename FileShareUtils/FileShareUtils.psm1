@@ -819,7 +819,7 @@ Function Get-NetShares{
                 If (($str502.Type -band 0x00000001) -ne 0 -and ($str502.Type -band 0x00000002) -ne 0){
                     $Type = "IPC"
                 } Else {
-                    If ($str502.Type -band 0x00000001){
+                   If ($str502.Type -band 0x00000001){
                         $Type = "Print Queue"
                     } Else {
                         If ($str502.Type -band 0x00000002){
@@ -869,7 +869,7 @@ Function Get-NetShare{
             Author: Jean-Marc Ulrich
             Version History:
                 1.0 //First version 10.05.2018
-
+                1.1 //Lists also EncryptData option 16.09.2023
         .EXAMPLE
             Get-NetShare -Name 'TestShare' -Server 'srv1234'
 
@@ -994,6 +994,7 @@ Function Get-NetFileShares{
             Author: Jean-Marc Ulrich
             Version History:
                 1.0 //First version 10.05.2018
+                1.1 //Lists also EncryptData option 16.09.2023
 
         .EXAMPLE
             Get-NetFileShares -Server 'srv1234'
@@ -1066,6 +1067,7 @@ Function New-NetShare{
             Author: Jean-Marc Ulrich
             Version History:
                 1.0 //First version 17.05.2018
+                1.1 //Add EncryptData option, Moved BranchCache to Caching mode, optionally permissions can be set as SDDL string 16.09.2023
 
         .EXAMPLE
             New-NetShare -Server 'srv1234' -Name 'TestShare' -Path 'D:\Data'
@@ -1177,6 +1179,7 @@ Function Set-NetShare{
             Author: Jean-Marc Ulrich
             Version History:
                 1.0 //First version 17.05.2018
+                1.1 //Add EncryptData option, Moved BranchCache to Caching mode, optionally permissions can be set as SDDL string 16.09.2023
 
         .EXAMPLE
             Set-NetShare -Server 'srv1234' -Name 'TestShare' -Description "A test share" -ABE Enabled -CachingMode None -MaxUses 50 -Permissions "DOMAINNAME\Domain Admins|FullControl,Everyone|Change,BUILTIN\Administrators|FullControl"
@@ -1444,6 +1447,7 @@ Function Redo-NetShare{
             Author: Jean-Marc Ulrich
             Version History:
                 1.0 //First version 01.12.2018
+                1.1 //Add EncryptData option, Moved BranchCache to Caching mode, optionally permissions can be set as SDDL string 16.09.2023
 
         .EXAMPLE
             Redo-NetShare -Server 'srv1234' -Name 'TestShare' -Path 'D:\Data'
