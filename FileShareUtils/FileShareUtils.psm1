@@ -351,10 +351,11 @@ public class Netapi
 
     public enum CacheType : uint
     {
-        Manual    = 0x00,
-        Documents = 0x10,
-        Programs  = 0x20,
-        None      = 0x30,
+        Manual      = 0x00,
+        Documents   = 0x10,
+        Programs    = 0x20,
+        None        = 0x30,
+        BranchCache = 0x2000,
     }
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
@@ -364,6 +365,8 @@ public class Netapi
     }
 
     public const int FLAGS_ACCESS_BASED_DIRECTORY_ENUM = 0x0800;
+
+    public const int FLAGS_Encryption_ENUM = 0x8000;
 
     public enum Share_Type : uint
     {
@@ -924,15 +927,21 @@ Function Get-NetShare{
         }
 
         # Offline (client side caching) configuration
-        $Share | Add-Member CachingMode ([enum]::GetValues([Netapi+CacheType]) | Where-Object {$_.value__ -eq ($ShareFlags -band 0x0030)})
+        $Share | Add-Member CachingMode ([enum]::GetValues([Netapi+CacheType]) | Where-Object {$_.value__ -eq ($ShareFlags -band 0x2030)})
+
+        If ($ShareFlags -band 0x8000){
+            $Share | Add-Member EncryptData "Enabled"
+        } Else {
+            $Share | Add-Member EncryptData "Disabled"
+        }
 
         # Prepare to read ACL
 	    If ($str502.SecurityDescriptor -ne 0){
 
             #$ShareACL = SDtoACL $str502.SecurityDescriptor
             #$ShareACLText = ACLArrayToACLText $ShareACL $True
-            $ShareACLSSDL = Convert-SDtoSDDL $str502.SecurityDescriptor 4 # 15 or 4
-            $ShareACL = Convert-SDDLToACL -SDDLString $ShareACLSSDL
+            $ShareACLSDDL = Convert-SDtoSDDL $str502.SecurityDescriptor 4 # 15 or 4
+            $ShareACL = Convert-SDDLToACL -SDDLString $ShareACLSDDL
             #$ShareACLText = $ShareACL.AccessToString
             $ShareACLText = Convert-ShareACLToText $ShareACL $True
 
@@ -943,12 +952,6 @@ Function Get-NetShare{
 
         $Share | Add-Member CurrentUses $str502.CurrentUses
         $Share | Add-Member ConcurrentUserLimit $str502.MaxUses
-
-        If ($ShareFlags -band 0x2000){
-            $Share | Add-Member BranchCache "Enabled"
-        } Else {
-            $Share | Add-Member BranchCache "Disabled"
-        }
 
         $Share | Add-Member Flags $ShareFlags
 
@@ -962,7 +965,7 @@ Function Get-NetShare{
             0x40000000    {$Share | Add-Member Type "Temporary"}
         }
 
-        $Share | Add-Member ShareSDDL $ShareACLSSDL
+        $Share | Add-Member ShareSDDL $ShareACLSDDL
 
         $Share | Add-Member ShareACL $ShareACL
 
@@ -1009,7 +1012,7 @@ Function Get-NetFileShares{
 
         ForEach ($FileShare in $FileShareList){
             IF ($FileShare.Type -eq "Disk Drive"){
-                Get-NetShare -Name $FileShare.Name -Server $FileShare.Server | Select-Object -Property Server,Name,Path,Description,ABE,CachingMode,ShareACLText,CurrentUses
+                Get-NetShare -Name $FileShare.Name -Server $FileShare.Server | Select-Object -Property Server,Name,Path,Description,ABE,CachingMode,EncryptData,ShareACLText,CurrentUses
             }
         }
     }
@@ -1038,16 +1041,21 @@ Function New-NetShare{
             The description/remark of the share
 
         .PARAMETER Permissions
-            Permissions on the share itself. Special format: Every permission is seperated by a comma and the identity and the access right are seperated by a |
-            Default: Everyone|FullControl
-            Possible Permissions: Read, Change, FullControl, Deny-FullControl
-            Possible Identities: Everyone, BUILTIN\Administrators, BUILTIN\Users, BUILTIN\xxxxx (server local users or groups), DOMAIN\UserName, ADCORP\GroupName, <NETBIOSDOMAINNAME>\<sAMAccountName> (domain objects)
+            Permissions on the share itself. Special text format or SDDL format
+            Text format : Every permission is seperated by a comma and the identity and the access right are seperated by a |
+                Default: Everyone|FullControl
+                Possible Permissions: Read, Change, FullControl, Deny-FullControl
+                Possible Identities: Everyone, BUILTIN\Administrators, BUILTIN\Users, BUILTIN\xxxxx (server local users or groups), DOMAIN\UserName, ADCORP\GroupName, <NETBIOSDOMAINNAME>\<sAMAccountName> (domain objects)
+            SDDL format: To detect SDDL format, string must start with "D:" Example "D:(A;;FA;;;BA)(A;;0x1301bf;;;BU)"
 
         .PARAMETER ABE
             Access based enumaration, can be Enabled or Disabled (default)
 
         .PARAMETER CachingMode
-            Offline Folder configuration, can be Manual (default), "None", "Documents" (all documents are automaticaly offline available), "Programs" ("Performance option", all files are automaticaly offline available)
+            Offline Folder configuration, can be Manual (default), "None", "Documents" (all documents are automaticaly offline available), "Programs" ("Performance option", all files are automaticaly offline available), "BranchCache"  (Enables BranchCache and manual caching of documents on the shared folder)
+
+        .PARAMETER EncryptData
+            Encryption feature of SMB3, can be Enabled or Disabled (default)
 
         .PARAMETER MaxUses
             Allowed connections to the share. Default is -1 that equals maximum
@@ -1088,10 +1096,14 @@ Function New-NetShare{
         [string]$ABE = "Disabled",
 
         [Parameter(Position=6,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
-        [ValidateSet("Manual", "None", "Documents", "Programs", IgnoreCase = $true)]
+        [ValidateSet("Manual", "None", "Documents", "Programs", "BranchCache", IgnoreCase = $true)]
         [string]$CachingMode = "Manual",
 
         [Parameter(Position=7,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [ValidateSet("Disabled", "Enabled", IgnoreCase = $true)]
+        [string]$EncryptData = "Disabled",
+
+        [Parameter(Position=8,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
         [Int]$MaxUses = -1
 
     )
@@ -1117,7 +1129,7 @@ Function New-NetShare{
             Throw ("Error during NetShareAdd: " + (Get-LastWin32ExceptionMessage $return))
         }
 
-        $return = Set-NetShare -Server $Server -Name $Name -Description $Description -Permissions $Permissions -ABE $ABE -CachingMode $CachingMode -MaxUses $MaxUses
+        $return = Set-NetShare -Server $Server -Name $Name -Description $Description -Permissions $Permissions -ABE $ABE -CachingMode $CachingMode -EncryptData $EncryptData -MaxUses $MaxUses
 
     }
 }
@@ -1141,16 +1153,21 @@ Function Set-NetShare{
             The description/remark of the share
 
         .PARAMETER Permissions
-            Permissions on the share itself. Special format: Every permission is seperated by a comma and the identity and the access right are seperated by a |
-            Default: Everyone|FullControl
-            Possible Permissions: Read, Change, FullControl, Deny-FullControl
-            Possible Identities: Everyone, BUILTIN\Administrators, BUILTIN\Users, BUILTIN\xxxxx (server local users or groups), DOMAIN\UserName, ADCORP\GroupName, <NETBIOSDOMAINNAME>\<sAMAccountName> (domain objects)
+            Permissions on the share itself. Special text format or SDDL format
+            Text format : Every permission is seperated by a comma and the identity and the access right are seperated by a |
+                Default: Everyone|FullControl
+                Possible Permissions: Read, Change, FullControl, Deny-FullControl
+                Possible Identities: Everyone, BUILTIN\Administrators, BUILTIN\Users, BUILTIN\xxxxx (server local users or groups), DOMAIN\UserName, ADCORP\GroupName, <NETBIOSDOMAINNAME>\<sAMAccountName> (domain objects)
+            SDDL format: To detect SDDL format, string must start with "D:" Example "D:(A;;FA;;;BA)(A;;0x1301bf;;;BU)"
 
         .PARAMETER ABE
             Access based enumaration, can be Enabled or Disabled (default)
 
         .PARAMETER CachingMode
-            Offline Folder configuration, can be Manual (default), "None", "Documents" (all documents are automaticaly offline available), "Programs" ("Performance option", all files are automaticaly offline available)
+            Offline Folder configuration, can be Manual (default), "None", "Documents" (all documents are automaticaly offline available), "Programs" ("Performance option", all files are automaticaly offline available), "BranchCache"  (Enables BranchCache and manual caching of documents on the shared folder)
+
+        .PARAMETER EncryptData
+            Encryption feature of SMB3, can be Enabled or Disabled (default)
 
         .PARAMETER MaxUses
             Allowed connections to the share. Default is -1 that equals maximum
@@ -1187,10 +1204,14 @@ Function Set-NetShare{
         [string]$ABE,
 
         [Parameter(Position=5,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
-        [ValidateSet("Manual", "None", "Documents", "Programs", IgnoreCase = $true)]
+        [ValidateSet("Manual", "None", "Documents", "Programs", "BranchCache", IgnoreCase = $true)]
         [string]$CachingMode,
 
         [Parameter(Position=6,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [ValidateSet("Disabled", "Enabled", IgnoreCase = $true)]
+        [string]$EncryptData = "Disabled",
+
+        [Parameter(Position=7,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
         [Int]$MaxUses
 
     )
@@ -1242,33 +1263,68 @@ Function Set-NetShare{
 
         If($PSBoundParameters.ContainsKey('Permissions')){
             If($Permissions){
-                # Convert and sort given permissions
-                $NewACL = Convert-ACLTextToShareACL $Permissions
-                $NewShareACLText = Convert-ShareACLToText $NewACL $True
 
-                If ($str502.SecurityDescriptor -ne 0){
+                # Check if permissions are in Text oder SDDL format
+                If($Permissions.Substring(0,2) -ne 'D:'){
+                 
+                    # Convert from text and sort given permissions
+                    $NewACL = Convert-ACLTextToShareACL $Permissions
+                    $NewShareACLText = Convert-ShareACLToText $NewACL $True
 
-                    $ShareACLSSDL = Convert-SDtoSDDL $str502.SecurityDescriptor 4 # 15 or 4
-                    $ShareACL = Convert-SDDLToACL -SDDLString $ShareACLSSDL
-                    $ShareACLText = Convert-ShareACLToText $ShareACL $True
-                }
+                    If ($str502.SecurityDescriptor -ne 0){
 
-                If($NewShareACLText -ne $ShareACLText){
-
-                    $sddlptr = [IntPtr]::Zero
-                    $sddlptr = [System.Runtime.Interopservices.Marshal]::StringToHGlobalAuto($NewACL.Sddl)
-
-                    $SDDL_REVISION_1 = 1
-                    $NewSDptr = [IntPtr]::Zero
-                    $NewSDsize = [IntPtr]::Zero
-                    $return = [Netapi]::ConvertStringSecurityDescriptorToSecurityDescriptor($sddlptr,$SDDL_REVISION_1,[ref]$NewSDptr,[ref]$NewSDsize)
-                    If($return -ne $True){
-                        Throw ("Error during ConvertStringSecurityDescriptorToSecurityDescriptor: " + (Get-LastWin32ExceptionMessage $return))
+                        $ShareACLSDDL = Convert-SDtoSDDL $str502.SecurityDescriptor 4 # 15 or 4
+                        $ShareACL = Convert-SDDLToACL -SDDLString $ShareACLSDDL
+                        $ShareACLText = Convert-ShareACLToText $ShareACL $True
                     }
 
-                    $str502.SecurityDescriptor = $NewSDptr
-                    $Write502 = $True
-                }
+                    If($NewShareACLText -ne $ShareACLText){
+
+                        $sddlptr = [IntPtr]::Zero
+                        $sddlptr = [System.Runtime.Interopservices.Marshal]::StringToHGlobalAuto($NewACL.Sddl)
+
+                        $SDDL_REVISION_1 = 1
+                        $NewSDptr = [IntPtr]::Zero
+                        $NewSDsize = [IntPtr]::Zero
+                        $return = [Netapi]::ConvertStringSecurityDescriptorToSecurityDescriptor($sddlptr,$SDDL_REVISION_1,[ref]$NewSDptr,[ref]$NewSDsize)
+                        If($return -ne $True){
+                            Throw ("Error during ConvertStringSecurityDescriptorToSecurityDescriptor: " + (Get-LastWin32ExceptionMessage $return))
+                        }
+
+                        $str502.SecurityDescriptor = $NewSDptr
+                        $Write502 = $True
+                    }
+
+                } Else {
+                    # Set SDDL Permissions
+                    #$NewACL = Convert-ACLTextToShareACL $Permissions
+                    #$NewShareACLText = Convert-ShareACLToText $NewACL $True
+
+                    If ($str502.SecurityDescriptor -ne 0){
+
+                        $ShareACLSDDL = Convert-SDtoSDDL $str502.SecurityDescriptor 4 # 15 or 4
+                        #$ShareACL = Convert-SDDLToACL -SDDLString $ShareACLSDDL
+                        #$ShareACLText = Convert-ShareACLToText $ShareACL $True
+                    }
+
+                    If($Permissions -ne $ShareACLSDDL){
+
+                        $sddlptr = [IntPtr]::Zero
+                        $sddlptr = [System.Runtime.Interopservices.Marshal]::StringToHGlobalAuto($Permissions)
+
+                        $SDDL_REVISION_1 = 1
+                        $NewSDptr = [IntPtr]::Zero
+                        $NewSDsize = [IntPtr]::Zero
+                        $return = [Netapi]::ConvertStringSecurityDescriptorToSecurityDescriptor($sddlptr,$SDDL_REVISION_1,[ref]$NewSDptr,[ref]$NewSDsize)
+                        If($return -ne $True){
+                            Throw ("Error during ConvertStringSecurityDescriptorToSecurityDescriptor: " + (Get-LastWin32ExceptionMessage $return))
+                        }
+
+                        $str502.SecurityDescriptor = $NewSDptr
+                        $Write502 = $True
+                    }
+
+                } # End of text or SDDL If statement
 	        }
         }
 
@@ -1301,8 +1357,19 @@ Function Set-NetShare{
 
         If($PSBoundParameters.ContainsKey('CachingMode')){
             $NewCachingFlags = [Netapi+CacheType]::($Cachingmode).value__
-            If (($ShareFlags -band 0x0030) -ne $NewCachingFlags){
-                $ShareFlags = $ShareFlags -bxor ($ShareFlags -band 0x0030) -bor $NewCachingFlags
+            If (($ShareFlags -band 0x2030) -ne $NewCachingFlags){
+                $ShareFlags = $ShareFlags -bxor ($ShareFlags -band 0x2030) -bor $NewCachingFlags
+                $Write1005 = $True
+            }
+        }
+
+        If($PSBoundParameters.ContainsKey('EncryptData')){
+            If($ShareFlags -band [Netapi]::FLAGS_Encryption_ENUM -AND $EncryptData -eq "Disabled"){
+                $ShareFlags = $ShareFlags -bxor [Netapi]::FLAGS_Encryption_ENUM
+                $Write1005 = $True
+            }
+            If(!($ShareFlags -band [Netapi]::FLAGS_Encryption_ENUM) -AND $EncryptData -eq "Enabled"){
+                $ShareFlags = $ShareFlags -bor [Netapi]::FLAGS_Encryption_ENUM
                 $Write1005 = $True
             }
         }
@@ -1352,16 +1419,21 @@ Function Redo-NetShare{
             The description/remark of the share
 
         .PARAMETER Permissions
-            Permissions on the share itself. Special format: Every permission is seperated by a comma and the identity and the access right are seperated by a |
-            Default: Everyone|FullControl
-            Possible Permissions: Read, Change, FullControl, Deny-FullControl
-            Possible Identities: Everyone, BUILTIN\Administrators, BUILTIN\Users, BUILTIN\xxxxx (server local users or groups), DOMAIN\UserName, ADCORP\GroupName, <NETBIOSDOMAINNAME>\<sAMAccountName> (domain objects)
+            Permissions on the share itself. Special text format or SDDL format
+            Text format : Every permission is seperated by a comma and the identity and the access right are seperated by a |
+                Default: Everyone|FullControl
+                Possible Permissions: Read, Change, FullControl, Deny-FullControl
+                Possible Identities: Everyone, BUILTIN\Administrators, BUILTIN\Users, BUILTIN\xxxxx (server local users or groups), DOMAIN\UserName, ADCORP\GroupName, <NETBIOSDOMAINNAME>\<sAMAccountName> (domain objects)
+            SDDL format: To detect SDDL format, string must start with "D:" Example "D:(A;;FA;;;BA)(A;;0x1301bf;;;BU)"
 
         .PARAMETER ABE
             Access based enumaration, can be Enabled or Disabled (default)
 
         .PARAMETER CachingMode
             Offline Folder configuration, can be Manual (default), "None", "Documents" (all documents are automaticaly offline available), "Programs" ("Performance option", all files are automaticaly offline available)
+
+        .PARAMETER EncryptData
+            Encryption feature of SMB3, can be Enabled or Disabled (default)
 
         .PARAMETER MaxUses
             Allowed connections to the share. Default is -1 that equals maximum
@@ -1406,6 +1478,10 @@ Function Redo-NetShare{
         [string]$CachingMode = "Manual",
 
         [Parameter(Position=7,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
+        [ValidateSet("Disabled", "Enabled", IgnoreCase = $true)]
+        [string]$EncryptData = "Disabled",
+
+        [Parameter(Position=8,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
         [Int]$MaxUses = -1
 
     )
@@ -1431,21 +1507,24 @@ Function Redo-NetShare{
             If(-Not $PSBoundParameters.ContainsKey('CachingMode')){
                 $CachingMode = $ExistingShare.CachingMode
             }
+            If(-Not $PSBoundParameters.ContainsKey('EncryptData')){
+                $EncryptData = $ExistingShare.EncryptData
+            }
             If(-Not $PSBoundParameters.ContainsKey('MaxUses')){
                 $MaxUses = $ExistingShare.ConcurrentUserLimit
             }
 
             If($ExistingShare.Path -eq $Path){
                 # Just modify Settings
-                $return = Set-NetShare -Server $Server -Name $Name -Description $Description -Permissions $Permissions -ABE $ABE -CachingMode $CachingMode -MaxUses $MaxUses
+                $return = Set-NetShare -Server $Server -Name $Name -Description $Description -Permissions $Permissions -ABE $ABE -CachingMode $CachingMode -EncryptData $EncryptData -MaxUses $MaxUses
             } Else {
                 # Path is different, so the share must be erased and recreated
                 $return = Remove-NetShare -Server $Server -Name $Name
-                $return = New-NetShare -Server $Server -Name $Name -Path $Path -Description $Description -Permissions $Permissions -ABE $ABE -CachingMode $CachingMode -MaxUses $MaxUses
+                $return = New-NetShare -Server $Server -Name $Name -Path $Path -Description $Description -Permissions $Permissions -ABE $ABE -CachingMode $CachingMode -EncryptData $EncryptData -MaxUses $MaxUses
             }
 
         } Else {
-            $return = New-NetShare -Server $Server -Name $Name -Path $Path -Description $Description -Permissions $Permissions -ABE $ABE -CachingMode $CachingMode -MaxUses $MaxUses
+            $return = New-NetShare -Server $Server -Name $Name -Path $Path -Description $Description -Permissions $Permissions -ABE $ABE -CachingMode $CachingMode -EncryptData $EncryptData -MaxUses $MaxUses
         }
         $return = $return
     }

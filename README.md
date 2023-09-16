@@ -45,6 +45,7 @@ Path | The local path shared
 Description | The remark or description of the share
 ABE | Access based enumeration, can be Enabled or Disabled (default)
 CachingMode | Offline Folder configuration, can be:<br/>"Manual" (default)<br/>"None" <br/>"Documents" (all documents are automatically offline available)<br/>"Programs" ("Performance option", all files are automatically offline available)
+EncryptData | Encryption feature of SMB3, can be Enabled or Disabled (default)
 ShareACLText | Permissions on the share itself. Special format: Every permission is separated by a comma and the identity and the access right are separated by a &#124; _(pipe)_ <br/> If blank probably the default permission "Everyone&#124;FullControl" is set.
 CurrentUses | Current connections to this share
 
@@ -63,11 +64,11 @@ Name | The name of the share
 Path | The local path shared
 Description | The remark or description of the share
 ABE | Access based enumeration, can be Enabled or Disabled (default)
-CachingMode | Offline Folder configuration, can be:<br/>"Manual" (default)<br/>"None" <br/>"Documents" (all documents are automatically offline available)<br/>"Programs" ("Performance option", all files are automatically offline available)
+CachingMode | Offline Folder configuration, can be:<br/>"Manual" (default)<br/>"None" <br/>"Documents" (all documents are automatically offline available)<br/>"Programs" ("Performance option", all files are automatically offline available)<br/>"BranchCache"  (Enables BranchCache and manual caching of documents on the shared folder)
 ShareACLText | Permissions on the share itself. Special format: Every permission is separated by a comma and the identity and the access right are separated by a &#124; _(pipe)_ <br/> If blank probably the default permission "Everyone&#124;FullControl" is set.
 CurrentUses | Current connections to this share
 ConcurrentUserLimit | Allowed connections to the share. Default is -1 that equals maximum
-BranchCache | BranchCache can be Enabled or Disabled (default)
+EncryptData | Encryption feature of SMB3, can be Enabled or Disabled (default)
 Flags | Decimal value of the netapi32 1005 structure flags
 Type | The type of the share
 ShareSDDL | The DACL of the share in SDDL format
@@ -87,9 +88,10 @@ Server | The machine hosting the share, default is the local machine
 **&#42; Name** | The name of the share
 **&#42; Path** | The local path to be shared
 Description | The remark or description of the share
-Permissions | The share permissions to set on the share itself. Special format: Every permission is separated by a comma and the identity and the access right are separated by a &#124; _(pipe)_ <br/>Default: Everyone&#124;FullControl<br/>Possible Permissions: Read, Change, FullControl, Deny-FullControl<br/>Possible Identities: Everyone, BUILTIN\Administrators, BUILTIN\Users, BUILTIN\xxxxx (server local users or groups), DOMAIN\UserName, ADCORP\GroupName, \<NETBIOSDOMAINNAME>\\\<sAMAccountName> (domain objects)
+Permissions | The share permissions to set on the share itself. Special text format or SDDL format<br/>Text format: Every permission is separated by a comma and the identity and the access right are separated by a &#124; _(pipe)_ <br/>Default: Everyone&#124;FullControl<br/>Possible Permissions: Read, Change, FullControl, Deny-FullControl<br/>Possible Identities: Everyone, BUILTIN\Administrators, BUILTIN\Users, BUILTIN\xxxxx (server local users or groups), DOMAIN\UserName, ADCORP\GroupName, \<NETBIOSDOMAINNAME>\\\<sAMAccountName> (domain objects)<br/>SDDL format: To detect SDDL format, string must start with "D:" Example "D:(A;;FA;;;BA)(A;;0x1301bf;;;BU)"
 ABE | Access based enumeration, can be Enabled or Disabled (default)
-CachingMode | Offline Folder configuration, can be:<br/>"Manual" (default)<br/>"None" <br/>"Documents" (all documents are automatically offline available)<br/>"Programs" ("Performance option", all files are automatically offline available)
+CachingMode | Offline Folder configuration, can be:<br/>"Manual" (default)<br/>"None" <br/>"Documents" (all documents are automatically offline available)<br/>"Programs" ("Performance option", all files are automatically offline available)<br/>"BranchCache"  (Enables BranchCache and manual caching of documents on the shared folder)
+EncryptData | Encryption feature of SMB3, can be Enabled or Disabled (default)
 MaxUses | Allowed connections to the share. Default is -1 that equals maximum
 
 This function returns nothing.
@@ -108,9 +110,10 @@ Server | The machine hosting the share, default is the local machine
 **&#42; Name** | The name of the share
 **&#42; Path** | The local path to be shared
 Description | The remark or description of the share
-Permissions | The share permissions to set on the share itself. Special format: Every permission is separated by a comma and the identity and the access right are separated by a &#124; _(pipe)_ <br/>Default: Everyone&#124;FullControl<br/>Possible Permissions: Read, Change, FullControl, Deny-FullControl<br/>Possible Identities: Everyone, BUILTIN\Administrators, BUILTIN\Users, BUILTIN\xxxxx (server local users or groups), DOMAIN\UserName, ADCORP\GroupName, \<NETBIOSDOMAINNAME>\\\<sAMAccountName> (domain objects)
+Permissions | The share permissions to set on the share itself. Special text format or SDDL format<br/>Text format: Every permission is separated by a comma and the identity and the access right are separated by a &#124; _(pipe)_ <br/>Default: Everyone&#124;FullControl<br/>Possible Permissions: Read, Change, FullControl, Deny-FullControl<br/>Possible Identities: Everyone, BUILTIN\Administrators, BUILTIN\Users, BUILTIN\xxxxx (server local users or groups), DOMAIN\UserName, ADCORP\GroupName, \<NETBIOSDOMAINNAME>\\\<sAMAccountName> (domain objects)<br/>SDDL format: To detect SDDL format, string must start with "D:" Example "D:(A;;FA;;;BA)(A;;0x1301bf;;;BU)"
 ABE | Access based enumeration, can be Enabled or Disabled (default)
-CachingMode | Offline Folder configuration, can be:<br/>"Manual" (default)<br/>"None" <br/>"Documents" (all documents are automatically offline available)<br/>"Programs" ("Performance option", all files are automatically offline available)
+CachingMode | Offline Folder configuration, can be:<br/>"Manual" (default)<br/>"None" <br/>"Documents" (all documents are automatically offline available)<br/>"Programs" ("Performance option", all files are automatically offline available)<br/>"BranchCache"  (Enables BranchCache and manual caching of documents on the shared folder)
+EncryptData | Encryption feature of SMB3, can be Enabled or Disabled (default)
 MaxUses | Allowed connections to the share. Default is -1 that equals maximum
 
 This function returns nothing.
@@ -128,9 +131,10 @@ Property | Description
 Server | The machine hosting the share, default is the local machine
 **&#42; Name** | The name of the share
 Description | The remark or description of the share
-Permissions | The share permissions to set on the share itself. Special format: Every permission is separated by a comma and the identity and the access right are separated by a &#124; _(pipe)_ <br/>Possible Permissions: Read, Change, FullControl, Deny-FullControl<br/>Possible Identities: Everyone, BUILTIN\Administrators, BUILTIN\Users, BUILTIN\xxxxx (server local users or groups), DOMAIN\UserName, ADCORP\GroupName, \<NETBIOSDOMAINNAME>\\\<sAMAccountName> (domain objects)
+Permissions | The share permissions to set on the share itself. Special text format or SDDL format<br/>Text format: Every permission is separated by a comma and the identity and the access right are separated by a &#124; _(pipe)_ <br/>Default: Everyone&#124;FullControl<br/>Possible Permissions: Read, Change, FullControl, Deny-FullControl<br/>Possible Identities: Everyone, BUILTIN\Administrators, BUILTIN\Users, BUILTIN\xxxxx (server local users or groups), DOMAIN\UserName, ADCORP\GroupName, \<NETBIOSDOMAINNAME>\\\<sAMAccountName> (domain objects)<br/>SDDL format: To detect SDDL format, string must start with "D:" Example "D:(A;;FA;;;BA)(A;;0x1301bf;;;BU)"
 ABE | Access based enumeration, can be Enabled or Disabled (default)
-CachingMode | Offline Folder configuration, can be:<br/>"Manual" (default)<br/>"None" <br/>"Documents" (all documents are automatically offline available)<br/>"Programs" ("Performance option", all files are automatically offline available)
+CachingMode | Offline Folder configuration, can be:<br/>"Manual" (default)<br/>"None" <br/>"Documents" (all documents are automatically offline available)<br/>"Programs" ("Performance option", all files are automatically offline available)<br/>"BranchCache"  (Enables BranchCache and manual caching of documents on the shared folder)
+EncryptData | Encryption feature of SMB3, can be Enabled or Disabled (default)
 MaxUses | Allowed connections to the share. Default is -1 that equals maximum
 
 This function returns nothing.
