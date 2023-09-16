@@ -1474,7 +1474,7 @@ Function Redo-NetShare{
         [string]$ABE = "Disabled",
 
         [Parameter(Position=6,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
-        [ValidateSet("Manual", "None", "Documents", "Programs", IgnoreCase = $true)]
+        [ValidateSet("Manual", "None", "Documents", "Programs", "BranchCache", IgnoreCase = $true)]
         [string]$CachingMode = "Manual",
 
         [Parameter(Position=7,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
