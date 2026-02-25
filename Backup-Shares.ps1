@@ -7,5 +7,5 @@ $OutputFileName = 'Backup-Shares_' + $FileServer + '_' + $(get-date -format yyyy
 $AllShares = Get-NetFileShares -Server $FileServer
 ForEach ($Share in $AllShares){
     Write-Host $Share.Name
-    ("Redo-NetShare -Server '" + $Share.Server + "' -Name '" + $Share.Name + "' -Path '" + $Share.Path + "' -Description '" + $Share.Description + "' -Permissions '" + $Share.ShareACLText + "' -ABE " + $Share.ABE + " -CachingMode " + $Share.CachingMode) | Out-File -FilePath $OutputFileName -Encoding default -Append
+    ("Redo-NetShare -Server '" + $Share.Server + "' -Name '" + $Share.Name + "' -Path '" + $Share.Path + "' -Description '" + $Share.Description + "' -Permissions '" + $Share.ShareACLText + "' -ABE " + $Share.ABE + " -EncryptData " + $Share.EncryptData + " -CachingMode " + $Share.CachingMode) | Out-File -FilePath $OutputFileName -Encoding default -Append
 }
