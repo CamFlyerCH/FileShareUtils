@@ -12,6 +12,7 @@
           - NetShareGetInfo  levels 0, 1, 2, 501, 502, 503, 1005
           - NetShareEnum     levels 0, 1, 2, 501, 502, 503
           - GetFileInformationByHandleEx(FileRemoteProtocolInfo) on \\Server\Share\
+            (the share part of it is unreliable, see the note in the output)
           - Experimental: open \\Server\Share\ with MAXIMUM_ALLOWED and read the granted access
 
         To test another account without logging off, start the script with runas /netonly.
@@ -37,6 +38,7 @@
         Part of https://github.com/CamFlyerCH/FileShareUtils, background in issues #6 and #13
         Version History:
             1.0 //First version 17.10.2026
+            1.1 //Marked share capabilities, share flags and share type of FileRemoteProtocolInfo as unreliable 17.10.2026
 
     .EXAMPLE
         .\Test-NetShareInfoLevels.ps1 -Server 'srv1234' -Share 'Data'
@@ -506,14 +508,16 @@ Try {
                                               @(0x01, 'DFS'), @(0x02, 'Leasing'), @(0x04, 'LargeMTU'), @(0x08, 'MultiChannel'),
                                               @(0x10, 'PersistentHandles'), @(0x20, 'DirectoryLeasing'), @(0x40, 'Encryption'),
                                               @(0x80, 'Notifications')))
-                    $ProtocolInfo['Share capabilities'] = '0x{0:X8} ({1})' -f $ShareCaps, (Format-FlagList $ShareCaps @(
+                    # The share fields did not match NetShareGetInfo 1005 in tests (SYSVOL with flags
+                    # 0x1100 showed 0 here), so they are shown but marked as unreliable
+                    $ProtocolInfo['Share capabilities (unreliable)'] = '0x{0:X8} ({1})' -f $ShareCaps, (Format-FlagList $ShareCaps @(
                                               @(0x08, 'DFS'), @(0x10, 'ContinuousAvailability'), @(0x20, 'ScaleOut'),
                                               @(0x40, 'Cluster'), @(0x80, 'Asymmetric'), @(0x100, 'RedirectToOwner')))
-                    $ProtocolInfo['Share flags'] = Format-Smb2ShareFlags ([BitConverter]::ToUInt32($Bytes, 60))
+                    $ProtocolInfo['Share flags (unreliable)'] = Format-Smb2ShareFlags ([BitConverter]::ToUInt32($Bytes, 60))
                 }
                 If ($Protocol -eq 0x00020000 -and $Version -ge 4) {
                     $ShareType = $Bytes[64]
-                    $ProtocolInfo['Share type'] = Switch ($ShareType) { 1 { 'Disk' } 2 { 'Pipe' } 3 { 'Print' } 0 { '0 (not reported)' } Default { [string]$ShareType } }
+                    $ProtocolInfo['Share type (unreliable)'] = Switch ($ShareType) { 1 { 'Disk' } 2 { 'Pipe' } 3 { 'Print' } 0 { '0 (not reported)' } Default { [string]$ShareType } }
                 }
             }
         } Finally {
@@ -590,6 +594,9 @@ If ($GetInfoSddl) {
 Write-Host 'SMB client view of the share (FileRemoteProtocolInfo, works without admin rights):' -ForegroundColor Cyan
 If ($ProtocolInfo) {
     [pscustomobject]$ProtocolInfo | Format-List | Out-Host
+    Write-Host '  The lines marked "unreliable" did not match the share flags of NetShareGetInfo 1005 in tests.'
+    Write-Host '  Use levels 501 or 1005 above for the share settings.'
+    Write-Host ''
 } Else {
     Write-Host "  $ProtocolError"
     Write-Host ''
