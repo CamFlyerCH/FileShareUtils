@@ -12,23 +12,6 @@ Also there ae functions to list available snapshots and seek for folders and fil
 All these functions use netapi32 or advapi32 dll calls.
 
 <br/><br/>
-## Rights needed on the server
-
-Which share information you get is decided by the server, not by the API on your machine. Windows servers check the info level of the NetShareEnum and NetShareGetInfo calls:
-
-Level | Content | Needed on a Windows server
-------|---------|---------------------------
-0, 1 | Name, type and description | Every authenticated user
-501, 1005 | Like 1 plus the share flags (ABE, CachingMode, EncryptData ...) | Every authenticated user
-2, 502, 503 | Path, connection counts and (502, 503) the share permissions | Administrators or Server Operators (older versions also Print Operators and Power Users). For Windows Server 2022 and later Microsoft also lists Access Control Assistance Operators (documented for NetShareEnum).
-
-Users logged on locally (interactive, also by RDP) on the server need no special group membership. Samba based NAS (e.g. Synology) usually answer all levels for every authenticated user.
-
-Without admin rights use `Get-NetShares -Level 501`, `Get-NetShare -Level 501` or `Get-NetFileShares -Level 501`. Path, permissions and connection counts stay empty then.
-
-The script [Tests/Test-NetShareInfoLevels.ps1](Tests/Test-NetShareInfoLevels.ps1) shows for a server and a share which levels work for the account that runs it.
-
-<br/><br/>
 ## Functions to work with network shares
 
 #### Get-NetShares [[-Server] \<string>]  [[-Level] \<Int>]
@@ -350,9 +333,39 @@ Copy at least the two files of the module in the created folder:
 * FileShareUtils.psd1
 * FileShareUtils.psm1
 
+If you downloaded the files as ZIP from GitHub, Windows marks them as coming from the internet. Unblock them before the first import:  
+``Get-ChildItem <your module folder>\FileShareUtils -Recurse | Unblock-File``
+
 
 <br/><br/>
+## Rights needed on the server
 
+Which share information you get is decided by the server, not by the API on your machine. Windows servers check the info level of the NetShareEnum and NetShareGetInfo calls:
+
+Level | Content | Needed on a Windows server
+------|---------|---------------------------
+0, 1 | Name, type and description | Every authenticated user
+501, 1005 | Like 1 plus the share flags (ABE, CachingMode, EncryptData ...) | Every authenticated user
+2, 502, 503 | Path, connection counts and (502, 503) the share permissions | Administrators or Server Operators (older versions also Print Operators and Power Users). For Windows Server 2022 and later Microsoft also lists Access Control Assistance Operators (documented for NetShareEnum).
+
+Users logged on locally (interactive, also by RDP) on the server need no special group membership. Samba based NAS (e.g. Synology) usually answer all levels for every authenticated user.
+
+Without admin rights use `Get-NetShares -Level 501`, `Get-NetShare -Level 501` or `Get-NetFileShares -Level 501`. Path, permissions and connection counts stay empty then.
+
+The script [Tests/Test-NetShareInfoLevels.ps1](Tests/Test-NetShareInfoLevels.ps1) shows for a server and a share which levels work for the account that runs it.
+
+<br/><br/>
+## Backup of the share configuration
+
+The script [Backup-Shares.ps1](Backup-Shares.ps1) saves the configuration of all file shares of a server as a restore script:
+
+1. Set the server name in `$FileServer` at the top of the script and run it.
+2. The script reads all file shares with `Get-NetFileShares` and writes one `Redo-NetShare` line per share (Path, Description, permissions, ABE, EncryptData, CachingMode) into the file `Backup-Shares_<server>_<date>_<time>.ps1.txt` in the current folder.
+3. To restore, check the file, rename it to `.ps1` and run it. `Redo-NetShare` creates missing shares and corrects the settings of existing ones.
+
+The backup needs level 502 and therefore admin rights on the server (see Rights needed on the server). The connection limit (MaxUses) is not saved, and names, paths or descriptions containing a single quote (') have to be corrected by hand. Under PowerShell 7 use version 1.0.25 or newer, older versions wrote empty permissions there.
+
+<br/><br/>
 ## Credits
 
 I searched very long and intensive for the solutions now built in this module. But I found some helpful blogs other information on the internet and I like to mention them here.
