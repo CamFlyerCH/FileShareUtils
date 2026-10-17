@@ -6,6 +6,9 @@
 # Alexander in his Kazun PowerShell blog https://kazunposh.wordpress.com/
 # Jordan Borean https://gist.github.com/jborean93/f60da33b08f8e1d5e0ef545b0a4698a0
 
+# PowerShell 7 adds the .Access property of ACL objects (e.g. ShareACL.Access) only with this module
+Import-Module Microsoft.PowerShell.Security -ErrorAction SilentlyContinue
+
 # Code to access the netapi32, kernel32 and advapi32 functions
 Add-Type -TypeDefinition @" 
 using System;
@@ -42,6 +45,15 @@ public class Netapi
 		[MarshalAs(UnmanagedType.LPWStr)] public string Path;
 		[MarshalAs(UnmanagedType.LPWStr)] public string Password;
    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    public struct SHARE_INFO_501
+    {
+		[MarshalAs(UnmanagedType.LPWStr)] public string Name;
+		public uint Type;
+		[MarshalAs(UnmanagedType.LPWStr)] public string Remark;
+		public uint Flags;
+    }
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
     public struct SHARE_INFO_502
@@ -506,7 +518,7 @@ Function Get-LastWin32ExceptionMessage {
     return $ExpMsg
 }
 
-Function Get-DNSGet-DNSReverseLookup{
+Function Get-DNSReverseLookup{
     Param(
         [Parameter(Position=0,Mandatory=$True,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
         [string]$IP
@@ -527,7 +539,9 @@ Function Convert-ShareACLToText($ShareACL,$SortACL){
     $InACEseperator = "|"
     $ShareACLText = ""
 
-    $ShareACLArray = $ShareACL.Access
+    # GetAccessRules instead of the .Access property: .Access is a PowerShell type extension that
+    # PowerShell 7 only knows after Microsoft.PowerShell.Security was loaded, otherwise the text stays empty
+    $ShareACLArray = @($ShareACL.GetAccessRules($True, $True, [System.Security.Principal.NTAccount]))
 
     If($ShareACLArray.Count -ne 0){
         If($SortACL){
@@ -629,6 +643,55 @@ Function Convert-SDDLToACL {
         $ACLObject = New-Object -TypeName System.Security.AccessControl.DirectorySecurity
         $ACLObject.SetSecurityDescriptorSddlForm($SDDL)
         $ACLObject
+    }
+}
+
+Function Convert-ShareTypeToText([uint32]$Type){
+    # The base type sits in the lowest byte (STYPE_MASK), special and temporary are additional bits.
+    # 0x80000000 is a negative Int32 in PowerShell, so the bits are tested with -band and not with Switch.
+    Switch ($Type -band 0xFF){
+        0       {$Text = "Disk Drive"}
+        1       {$Text = "Print Queue"}
+        2       {$Text = "Device"}
+        3       {$Text = "IPC"}
+        Default {$Text = "Unknown"}
+    }
+    If (($Type -band 0x40000000) -ne 0){
+        $Text = $Text + " Temporary"
+    }
+    If (($Type -band 0x80000000) -ne 0){
+        $Text = $Text + " Special"
+    }
+    $Text
+}
+
+Function Add-ShareFlagProperties($Share,[uint32]$ShareFlags){
+    # Adds the settings contained in the flags of SHARE_INFO_501 or SHARE_INFO_1005 to the share object
+    If ($ShareFlags -band 0x0800){
+        $Share | Add-Member ABE "Enabled"
+    } Else {
+        $Share | Add-Member ABE "Disabled"
+    }
+
+    # Offline (client side caching) configuration
+    $Share | Add-Member CachingMode ([enum]::GetValues([Netapi+CacheType]) | Where-Object {$_.value__ -eq ($ShareFlags -band 0x2030)})
+
+    If ($ShareFlags -band 0x8000){
+        $Share | Add-Member EncryptData "Enabled"
+    } Else {
+        $Share | Add-Member EncryptData "Disabled"
+    }
+
+    If ($ShareFlags -band 0x4000){
+        $Share | Add-Member ContinuouslyAvailable "Enabled"
+    } Else {
+        $Share | Add-Member ContinuouslyAvailable "Disabled"
+    }
+
+    If ($ShareFlags -band 0x100000){
+        $Share | Add-Member CompressData "Enabled"
+    } Else {
+        $Share | Add-Member CompressData "Disabled"
     }
 }
 
@@ -746,7 +809,17 @@ Function Get-NetShares{
             Computername on the network, local if left blank
 
         .PARAMETER Level
-            NetShareEnum info level. Defaults 502, but you can use 1 for listing shares without admin rights
+            NetShareEnum info level, defaults to 502
+                0   : Name only
+                1   : Name, Type and Description
+                2   : Like 502, the server returns no permissions
+                501 : Like 1 plus the share flags (ABE, CachingMode, EncryptData, ContinuouslyAvailable, CompressData)
+                502 : Name, Type, Description, Path and CurrentUses
+                503 : Like 502 plus ScopeName, also lists the shares of other scopes (e.g. clustered file servers),
+                      not supported by Samba based NAS
+            Windows servers answer levels 2, 502 and 503 only for members of Administrators or Server Operators,
+            on Windows Server 2022 and later also for Access Control Assistance Operators.
+            Levels 0, 1 and 501 work without admin rights. Samba based NAS usually answer all levels for every user.
 
         .NOTES
             Name: Get-NetShares
@@ -755,6 +828,7 @@ Function Get-NetShares{
                 1.0 //First version 10.05.2018
                 1.1 //Changed to support servers with more than ~250 shares
                 1.2 //Added level parameter to list shares without admin rights
+                1.3 //Added levels 0, 2, 501 (share flags) and 503 (ScopeName) 17.10.2026
 
         .EXAMPLE
             Get-NetShares -Server 'srv1234'
@@ -762,6 +836,13 @@ Function Get-NetShares{
             Description
             -----------
             Gets the information of all shares of a remote server
+
+        .EXAMPLE
+            Get-NetShares -Server 'srv1234' -Level 501
+
+            Description
+            -----------
+            Lists all shares of a remote server with ABE, CachingMode and EncryptData, works without admin rights
     #>
 	[CmdletBinding()]
     Param (
@@ -769,20 +850,22 @@ Function Get-NetShares{
         [string]$Server = ($env:computername).toLower(),
 
         [Parameter(Position=1,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
-        [ValidateSet(502,1)]
+        [ValidateSet(0,1,2,501,502,503)]
         [Int]$Level = 502
     )
     Begin {
-        # We want to query the 502 datas
 	    $buffer = 0
 	    $entries = 0
 	    $total = 0
 	    $handle = 0
         $Shares = @()
-        If($Level -eq 1){
-            $struct = New-Object Netapi+SHARE_INFO_1
-        } else {
-            $struct = New-Object Netapi+SHARE_INFO_502
+        Switch ($Level){
+            0   {$struct = New-Object Netapi+SHARE_INFO_0}
+            1   {$struct = New-Object Netapi+SHARE_INFO_1}
+            2   {$struct = New-Object Netapi+SHARE_INFO_2}
+            501 {$struct = New-Object Netapi+SHARE_INFO_501}
+            502 {$struct = New-Object Netapi+SHARE_INFO_502}
+            503 {$struct = New-Object Netapi+SHARE_INFO_503}
         }
         $ReadFinished = $False
 
@@ -790,7 +873,14 @@ Function Get-NetShares{
             $return = [Netapi]::NetShareEnum($Server, $level,[ref]$buffer,-1,[ref]$entries, [ref]$total,[ref]$handle)
 
             If($return -ne 0 -and $return -ne 234){
-               Throw ("Error during NetShareEnum: " + (Get-LastWin32ExceptionMessage $return))
+                If($return -eq 5 -and @(2,502,503) -contains $Level){
+                    Throw ("Error during NetShareEnum level $Level : " + (Get-LastWin32ExceptionMessage $return) + ". Levels 2, 502 and 503 need admin rights on the server, -Level 1 or -Level 501 work without them.")
+                }
+                If(@(124,1783) -contains $return -and $Level -eq 503){
+                    # ERROR_INVALID_LEVEL or RPC_X_BAD_STUB_DATA, Samba based NAS answer level 503 with the latter
+                    Throw ("Error during NetShareEnum level 503 : " + (Get-LastWin32ExceptionMessage $return) + ". The server does not support level 503 (e.g. Samba based NAS), use -Level 502.")
+                }
+                Throw ("Error during NetShareEnum: " + (Get-LastWin32ExceptionMessage $return))
             }
 
             If($entries -eq $total -and $return -eq 0){$ReadFinished = $True}
@@ -808,43 +898,37 @@ Function Get-NetShares{
 			    $offset = $ptr.ToInt64()
 	            $offset += $increment
 
-                # Get the easy data
+                # Get the easy data (fields missing in the chosen level stay empty)
                 $Share | Add-Member Server $Server
                 $Share | Add-Member Name $str502.Name
                 $Share | Add-Member Path $str502.Path
                 $Share | Add-Member Description $str502.Remark
                 $Share | Add-Member CurrentUses $str502.CurrentUses
 
-                # Get the type
-                If (($str502.Type -band 0x00000001) -ne 0 -and ($str502.Type -band 0x00000002) -ne 0){
-                    $Type = "IPC"
+                # Get the type, level 0 has none
+                If($Level -eq 0){
+                    $Share | Add-Member Type $null
                 } Else {
-                   If ($str502.Type -band 0x00000001){
-                        $Type = "Print Queue"
-                    } Else {
-                        If ($str502.Type -band 0x00000002){
-                            $Type = "Device"
-                        } Else {
-                            $Type = "Disk Drive"
-                        }
-                    }
+                    $Share | Add-Member Type (Convert-ShareTypeToText $str502.Type)
                 }
-                If (($str502.Type -band 0x40000000) -ne 0){
-                    $Type = $Type + " Temporary"
+
+                # Level 501 brings the flags, level 503 the scope (server name) of the share
+                If($Level -eq 501){
+                    Add-ShareFlagProperties $Share $str502.Flags
+                    $Share | Add-Member Flags $str502.Flags
                 }
-                If (($str502.Type -band 0x80000000) -ne 0){
-                    $Type = $Type + " Special"
+                If($Level -eq 503){
+                    $Share | Add-Member ScopeName $str502.ServerName
                 }
-                $Share | Add-Member Type $Type
 
                 $Shares += $Share
             }
+
+            # Cleanup memory, every call allocates a new buffer
+            [Netapi]::NetApiBufferFree($buffer) | Out-Null
         }
 
         $Shares | Sort-Object Path,Name
-
-        # Cleanup memory
-        [Netapi]::NetApiBufferFree($buffer) | Out-Null
     }
 }
 
@@ -864,18 +948,35 @@ Function Get-NetShare{
         .PARAMETER Server
             Computername on the network, local if left blank
 
+        .PARAMETER Level
+            NetShareGetInfo info level, defaults to 502
+                502 : All settings including Path, CurrentUses, ConcurrentUserLimit and permissions
+                501 : Description, Type and the settings from the share flags (ABE, CachingMode, EncryptData ...)
+                      Path, permissions and the connection counts stay empty.
+            Windows servers answer level 502 only for members of Administrators or Server Operators,
+            on Windows Server 2022 and later also for Access Control Assistance Operators.
+            Level 501 works without admin rights. Samba based NAS usually answer level 502 for every user.
+
         .NOTES
             Name: Get-NetShare
             Author: Jean-Marc Ulrich
             Version History:
                 1.0 //First version 10.05.2018
                 1.1 //Lists also EncryptData option 16.09.2023
+                1.2 //Added level 501 to read the share flags without admin rights, lists also ContinuouslyAvailable and CompressData, fixed the type of special shares 17.10.2026
         .EXAMPLE
             Get-NetShare -Name 'TestShare' -Server 'srv1234'
 
             Description
             -----------
             Gets the information of the share named "TestShare" of a remote server
+
+        .EXAMPLE
+            Get-NetShare -Name 'TestShare' -Server 'srv1234' -Level 501
+
+            Description
+            -----------
+            Gets the flags of the share named "TestShare" without admin rights on the server
     #>
 	[CmdletBinding()]
     Param (
@@ -883,94 +984,123 @@ Function Get-NetShare{
         [string]$Name,
 
         [Parameter(Position=1,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
-        [string]$Server = ($env:computername).toLower()
+        [string]$Server = ($env:computername).toLower(),
+
+        [Parameter(Position=2,Mandatory=$False)]
+        [ValidateSet(502,501)]
+        [Int]$Level = 502
     )
     Begin {
-        # We want to query the 502 data first
-        $bufptr = [IntPtr]::Zero
-        $struct = New-Object Netapi+SHARE_INFO_502
-        $return = [Netapi]::NetShareGetInfo($Server,$Name,502,[ref]$bufptr)
+        $ShareACLText = $null
+        $ShareACLSDDL = $null
+        $ShareACL = $null
 
-        If($return -eq 0){
-            $str502 = [System.Runtime.InteropServices.Marshal]::PtrToStructure($bufptr,[System.Type]$struct.GetType())
+        If($Level -eq 502){
+            # We want to query the 502 data first
+            $bufptr502 = [IntPtr]::Zero
+            $struct = New-Object Netapi+SHARE_INFO_502
+            $return = [Netapi]::NetShareGetInfo($Server,$Name,502,[ref]$bufptr502)
+
+            If($return -eq 0){
+                $Info = [System.Runtime.InteropServices.Marshal]::PtrToStructure($bufptr502,[System.Type]$struct.GetType())
+            } Else {
+                If($return -eq 5){
+                    Throw ("Error during NetShareGetInfo for $Name : " + (Get-LastWin32ExceptionMessage $return) + ". Path and permissions need admin rights on the server, -Level 501 reads the other settings without them.")
+                }
+                Throw ("Error during NetShareGetInfo for $Name : " + (Get-LastWin32ExceptionMessage $return))
+            }
+
+            Try{
+                # Prepare to read ACL
+	            If ($Info.SecurityDescriptor -ne 0){
+                    $ShareACLSDDL = Convert-SDtoSDDL $Info.SecurityDescriptor 4 # 15 or 4
+                    $ShareACL = Convert-SDDLToACL -SDDLString $ShareACLSDDL
+                    $ShareACLText = Convert-ShareACLToText $ShareACL $True
+	            } # EndIf SD present
+            } Finally {
+                # Cleanup memory, the security descriptor lives in this buffer, so only after the conversion
+                [Netapi]::NetApiBufferFree($bufptr502) | Out-Null
+            }
+
+            # Now read the flags
+            $bufptr1005 = [IntPtr]::Zero
+            $struct = New-Object Netapi+SHARE_INFO_1005
+            $return = [Netapi]::NetShareGetInfo($Server,$Name,1005,[ref]$bufptr1005)
+
+            If($return -eq 0){
+                $str1005 = [System.Runtime.InteropServices.Marshal]::PtrToStructure($bufptr1005,[System.Type]$struct.GetType())
+                [Netapi]::NetApiBufferFree($bufptr1005) | Out-Null
+            } Else {
+                Throw ("Error during NetShareGetInfo 1005: " + (Get-LastWin32ExceptionMessage $return))
+            }
+            $ShareFlags = $str1005.shi1005_flags
+
         } Else {
-            Throw ("Error during NetShareGetInfo for $Name : " + (Get-LastWin32ExceptionMessage $return))
-        }
+            # Level 501 returns name, type, remark and flags in one call and needs no admin rights
+            $bufptr501 = [IntPtr]::Zero
+            $struct = New-Object Netapi+SHARE_INFO_501
+            $return = [Netapi]::NetShareGetInfo($Server,$Name,501,[ref]$bufptr501)
 
-        # Now read the flags
-        $bufptr = [IntPtr]::Zero
-        $struct = New-Object Netapi+SHARE_INFO_1005
-        $return = [Netapi]::NetShareGetInfo($Server,$Name,1005,[ref]$bufptr)
+            If($return -eq 0){
+                $Info = [System.Runtime.InteropServices.Marshal]::PtrToStructure($bufptr501,[System.Type]$struct.GetType())
+                [Netapi]::NetApiBufferFree($bufptr501) | Out-Null
+                $ShareFlags = $Info.Flags
 
-        If($return -eq 0){
-            $str1005 = [System.Runtime.InteropServices.Marshal]::PtrToStructure($bufptr,[System.Type]$struct.GetType())
-        } Else {
-            Throw ("Error during NetShareGetInfo 1005: " + (Get-LastWin32ExceptionMessage $return))
+            } ElseIf($return -eq 124){
+                # ERROR_INVALID_LEVEL: the server does not know level 501, read the same data with levels 1 and 1005
+                $bufptr1 = [IntPtr]::Zero
+                $struct = New-Object Netapi+SHARE_INFO_1
+                $return = [Netapi]::NetShareGetInfo($Server,$Name,1,[ref]$bufptr1)
+
+                If($return -eq 0){
+                    $Info = [System.Runtime.InteropServices.Marshal]::PtrToStructure($bufptr1,[System.Type]$struct.GetType())
+                    [Netapi]::NetApiBufferFree($bufptr1) | Out-Null
+                } Else {
+                    Throw ("Error during NetShareGetInfo level 1 for $Name : " + (Get-LastWin32ExceptionMessage $return))
+                }
+
+                $bufptr1005 = [IntPtr]::Zero
+                $struct = New-Object Netapi+SHARE_INFO_1005
+                $return = [Netapi]::NetShareGetInfo($Server,$Name,1005,[ref]$bufptr1005)
+
+                If($return -eq 0){
+                    $str1005 = [System.Runtime.InteropServices.Marshal]::PtrToStructure($bufptr1005,[System.Type]$struct.GetType())
+                    [Netapi]::NetApiBufferFree($bufptr1005) | Out-Null
+                } Else {
+                    Throw ("Error during NetShareGetInfo 1005: " + (Get-LastWin32ExceptionMessage $return))
+                }
+                $ShareFlags = $str1005.shi1005_flags
+
+            } Else {
+                Throw ("Error during NetShareGetInfo level 501 for $Name : " + (Get-LastWin32ExceptionMessage $return))
+            }
         }
 
         # Define output object
         $Share = New-Object -TypeName PSObject
 
-        # Get the easy data
+        # Get the easy data (Path is empty with level 501)
         $Share | Add-Member Server $Server
-        $Share | Add-Member Name $str502.Name
-        $Share | Add-Member Path $str502.Path
-        $Share | Add-Member Description $str502.Remark
+        $Share | Add-Member Name $Info.Name
+        $Share | Add-Member Path $Info.Path
+        $Share | Add-Member Description $Info.Remark
 
         # Get infos contained in the flags
-        $ShareFlags = $str1005.shi1005_flags
-
-        If ($ShareFlags -band 0x0800){
-            $Share | Add-Member ABE "Enabled"
-        } Else {
-            $Share | Add-Member ABE "Disabled"
-        }
-
-        # Offline (client side caching) configuration
-        $Share | Add-Member CachingMode ([enum]::GetValues([Netapi+CacheType]) | Where-Object {$_.value__ -eq ($ShareFlags -band 0x2030)})
-
-        If ($ShareFlags -band 0x8000){
-            $Share | Add-Member EncryptData "Enabled"
-        } Else {
-            $Share | Add-Member EncryptData "Disabled"
-        }
-
-        # Prepare to read ACL
-	    If ($str502.SecurityDescriptor -ne 0){
-
-            #$ShareACL = SDtoACL $str502.SecurityDescriptor
-            #$ShareACLText = ACLArrayToACLText $ShareACL $True
-            $ShareACLSDDL = Convert-SDtoSDDL $str502.SecurityDescriptor 4 # 15 or 4
-            $ShareACL = Convert-SDDLToACL -SDDLString $ShareACLSDDL
-            #$ShareACLText = $ShareACL.AccessToString
-            $ShareACLText = Convert-ShareACLToText $ShareACL $True
-
-	    } # EndIf SD present
-
+        Add-ShareFlagProperties $Share $ShareFlags
 
         $Share | Add-Member ShareACLText $ShareACLText
 
-        $Share | Add-Member CurrentUses $str502.CurrentUses
-        $Share | Add-Member ConcurrentUserLimit $str502.MaxUses
+        $Share | Add-Member CurrentUses $Info.CurrentUses
+        $Share | Add-Member ConcurrentUserLimit $Info.MaxUses
 
         $Share | Add-Member Flags $ShareFlags
 
         # Get the type
-        Switch ($str502.Type){
-            0x00000000    {$Share | Add-Member Type "Disk Drive"}
-            0x00000001    {$Share | Add-Member Type "Print Queue"}
-            0x00000002    {$Share | Add-Member Type "Device"}
-            0x00000003    {$Share | Add-Member Type "IPC"}
-            0x80000000    {$Share | Add-Member Type "Special"}
-            0x40000000    {$Share | Add-Member Type "Temporary"}
-        }
+        $Share | Add-Member Type (Convert-ShareTypeToText $Info.Type)
 
         $Share | Add-Member ShareSDDL $ShareACLSDDL
 
         $Share | Add-Member ShareACL $ShareACL
-
-        # Cleanup memory
-        [Netapi]::NetApiBufferFree($bufptr) | Out-Null
 
         $Share
 
@@ -989,12 +1119,21 @@ Function Get-NetFileShares{
         .PARAMETER Server
             Computername on the network, local if left blank
 
+        .PARAMETER Level
+            Info level used for the shares, defaults to 502
+                502 : All properties including Path, ShareACLText and CurrentUses
+                501 : ABE, CachingMode and EncryptData without admin rights on the server.
+                      Path, ShareACLText and CurrentUses stay empty.
+            Windows servers answer level 502 only for members of Administrators or Server Operators,
+            on Windows Server 2022 and later also for Access Control Assistance Operators.
+
         .NOTES
             Name: Get-NetFileShares
             Author: Jean-Marc Ulrich
             Version History:
                 1.0 //First version 10.05.2018
                 1.1 //Lists also EncryptData option 16.09.2023
+                1.2 //Added level 501 to list the share flags without admin rights 17.10.2026
 
         .EXAMPLE
             Get-NetFileShares -Server 'srv1234'
@@ -1002,18 +1141,34 @@ Function Get-NetFileShares{
             Description
             -----------
             Gets the information of all shares of a remote server
+
+        .EXAMPLE
+            Get-NetFileShares -Server 'srv1234' -Level 501
+
+            Description
+            -----------
+            Lists the file shares of a remote server with ABE, CachingMode and EncryptData without admin rights
     #>
 	[CmdletBinding()]
     Param (
         [Parameter(Position=0,Mandatory=$False,ValueFromPipeline=$True,ValueFromPipelineByPropertyName=$True)]
-        [string]$Server = ($env:computername).toLower()
+        [string]$Server = ($env:computername).toLower(),
+
+        [Parameter(Position=1,Mandatory=$False)]
+        [ValidateSet(502,501)]
+        [Int]$Level = 502
     )
     Begin {
-        $FileShareList = Get-NetShares -Server $Server | Sort-Object Server,Path,Name
+        If($Level -eq 502){
+            $FileShareList = Get-NetShares -Server $Server -Level 502 | Sort-Object Server,Path,Name
+        } Else {
+            # Level 1 is known by all servers, Get-NetShare then reads the flags of each share
+            $FileShareList = Get-NetShares -Server $Server -Level 1 | Sort-Object Server,Name
+        }
 
         ForEach ($FileShare in $FileShareList){
             IF ($FileShare.Type -eq "Disk Drive"){
-                Get-NetShare -Name $FileShare.Name -Server $FileShare.Server | Select-Object -Property Server,Name,Path,Description,ABE,CachingMode,EncryptData,ShareACLText,CurrentUses
+                Get-NetShare -Name $FileShare.Name -Server $FileShare.Server -Level $Level | Select-Object -Property Server,Name,Path,Description,ABE,CachingMode,EncryptData,ShareACLText,CurrentUses
             }
         }
     }
@@ -1125,7 +1280,9 @@ Function New-NetShare{
 
         $return = [Netapi]::NetShareAdd($Server,502,$bufptr,$paramerror)
 
-        [Netapi]::NetApiBufferFree($bufptr) | Out-Null
+        # The buffer comes from AllocCoTaskMem, so free it the same way, including the marshaled strings
+        [System.Runtime.InteropServices.Marshal]::DestroyStructure($bufptr,[System.Type]$struct.GetType())
+        [System.Runtime.InteropServices.Marshal]::FreeCoTaskMem($bufptr)
 
         If($return -ne 0){
             Throw ("Error during NetShareAdd: " + (Get-LastWin32ExceptionMessage $return))
@@ -1340,6 +1497,10 @@ Function Set-NetShare{
 
             $return = [Netapi]::NetShareSetInfo($Server,$Name,502,$bufptr,$paramerror)
 
+            # The buffer comes from AllocCoTaskMem, so free it the same way, including the marshaled strings
+            [System.Runtime.InteropServices.Marshal]::DestroyStructure($bufptr,[System.Type]$str502.GetType())
+            [System.Runtime.InteropServices.Marshal]::FreeCoTaskMem($bufptr)
+
             If($return -ne 0){
                 Throw ("Error during NetShareSetInfo 502: " + (Get-LastWin32ExceptionMessage $return))
             }
@@ -1386,7 +1547,8 @@ Function Set-NetShare{
 
             $return = [Netapi]::NetShareSetInfo($Server,$Name,1005,$bufptr,$paramerror)
 
-            [Netapi]::NetApiBufferFree($bufptr) | Out-Null
+            # The buffer comes from AllocCoTaskMem, so free it the same way
+            [System.Runtime.InteropServices.Marshal]::FreeCoTaskMem($bufptr)
 
             If($return -ne 0){
                 Throw ("Error during NetShareSetInfo 1005: " + (Get-LastWin32ExceptionMessage $return))
@@ -1492,7 +1654,8 @@ Function Redo-NetShare{
     Begin {
 
         Try{
-            $ExistingShare = Get-NetShare -Server $Server -Name $Name
+            # Always level 502: the path comparison below needs the full data, never the reduced level 501
+            $ExistingShare = Get-NetShare -Server $Server -Name $Name -Level 502
         } Catch {
             $error.clear()
         }
@@ -1749,7 +1912,7 @@ Function Get-NetSessions{
 
                 $ClientIP = $session.Name
                 # Resolve hostname
-                $Clientname = Get-DNSGet-DNSReverseLookup $Session.Name
+                $Clientname = Get-DNSReverseLookup $Session.Name
 
                 $TimeTS = New-TimeSpan -Seconds $Session.Time
                 $Time = [String]([Int]$TimeTS.TotalHours) + ":" + [String]($TimeTS.Minutes)

@@ -23,20 +23,22 @@ Please check also the better documented GitHub page https://github.com/CamFlyerC
 
 #### Get-NetShares [[-Server] \<string>]  [[-Level] \<Int>]
 
-With this command you get a list of all shares on the machine or from a specified server. I you do not have admin rights you can try the option -Level 1  (Default is 502).
+With this command you get a list of all shares on the machine or from a specified server. If you do not have admin rights, use the option -Level 1 or -Level 501 (Default is 502). Levels 0, 1, 2, 501, 502 and 503 are available, level 501 adds the share flags (ABE, CachingMode, EncryptData) and level 503 the ScopeName.
 
 
 <br/>
 
-#### Get-NetFileShares [[-Server] \<string>]
+#### Get-NetFileShares [[-Server] \<string>] [[-Level] \<Int>]
 
-With this command you get a even more detailed list of all the **file** shares on the machine or from a specified server. The IPC and administrative (special) shares are left out.
+With this command you get a even more detailed list of all the **file** shares on the machine or from a specified server. The IPC and administrative (special) shares are left out. Without admin rights use the option -Level 501, then Path, ShareACLText and CurrentUses stay empty.
 
 <br/>
 
-#### Get-NetShare [-Name] \<string> [[-Server] \<string>] 
+#### Get-NetShare [-Name] \<string> [[-Server] \<string>] [[-Level] \<Int>]
 
-With this command you get detailed information about the specified share on the machine or from a remote server.
+With this command you get detailed information about the specified share on the machine or from a remote server. Without admin rights use the option -Level 501, then Path, permissions and connection counts stay empty.
+
+Windows servers return path and permissions (levels 2, 502, 503) only to Administrators or Server Operators, on Windows Server 2022 and later also to Access Control Assistance Operators. Samba based NAS usually answer all levels for every authenticated user.
 
 <br/>
 

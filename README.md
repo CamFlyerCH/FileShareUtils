@@ -12,11 +12,37 @@ Also there ae functions to list available snapshots and seek for folders and fil
 All these functions use netapi32 or advapi32 dll calls.
 
 <br/><br/>
+## Rights needed on the server
+
+Which share information you get is decided by the server, not by the API on your machine. Windows servers check the info level of the NetShareEnum and NetShareGetInfo calls:
+
+Level | Content | Needed on a Windows server
+------|---------|---------------------------
+0, 1 | Name, type and description | Every authenticated user
+501, 1005 | Like 1 plus the share flags (ABE, CachingMode, EncryptData ...) | Every authenticated user
+2, 502, 503 | Path, connection counts and (502, 503) the share permissions | Administrators or Server Operators (older versions also Print Operators and Power Users). For Windows Server 2022 and later Microsoft also lists Access Control Assistance Operators (documented for NetShareEnum).
+
+Users logged on locally (interactive, also by RDP) on the server need no special group membership. Samba based NAS (e.g. Synology) usually answer all levels for every authenticated user.
+
+Without admin rights use `Get-NetShares -Level 501`, `Get-NetShare -Level 501` or `Get-NetFileShares -Level 501`. Path, permissions and connection counts stay empty then.
+
+The script [Tests/Test-NetShareInfoLevels.ps1](Tests/Test-NetShareInfoLevels.ps1) shows for a server and a share which levels work for the account that runs it.
+
+<br/><br/>
 ## Functions to work with network shares
 
 #### Get-NetShares [[-Server] \<string>]  [[-Level] \<Int>]
 
-With this command you get a list of all shares on the machine or from a specified server. I you do not have admin rights you can try the option -Level 1  (Default is 502).
+With this command you get a list of all shares on the machine or from a specified server. If you do not have admin rights, use the option -Level 1 or -Level 501 (Default is 502).
+
+Level | Returned information
+------|---------------------
+0 | Name only
+1 | Name, Type and Description
+2 | Like 502, the server returns no permissions
+501 | Like 1 plus ABE, CachingMode, EncryptData, ContinuouslyAvailable, CompressData and Flags
+502 | Name, Type, Description, Path and CurrentUses (default)
+503 | Like 502 plus ScopeName, also lists the shares of other scopes (e.g. clustered file servers). Not supported by Samba based NAS
 
 The returned array of objects will have the following properties:
 
@@ -24,16 +50,20 @@ Property | Description
 ---------|----------
 Server | The machine hosting the shares
 Name | The name of the share
-Path | The local path shared
+Path | The local path shared (levels 2, 502 and 503)
 Description | The remark or description of the share
-CurrentUses | Current connections to this share
+CurrentUses | Current connections to this share (levels 2, 502 and 503)
 Type | The type of the share
+ABE, CachingMode, EncryptData, ContinuouslyAvailable, CompressData, Flags | Only with level 501, see Get-NetShare
+ScopeName | Only with level 503, the server name (scope) of the share, "*" for shares without a scope
 
 <br/>
 
-#### Get-NetFileShares [[-Server] \<string>]
+#### Get-NetFileShares [[-Server] \<string>] [[-Level] \<Int>]
 
 With this command you get a even more detailed list of all the **file** shares on the machine or from a specified server. The IPC and administrative (special) shares are left out.
+
+If you do not have admin rights, use the option -Level 501 (Default is 502). Then ABE, CachingMode and EncryptData are listed, Path, ShareACLText and CurrentUses stay empty.
 
 The returned array of objects will have the following properties:
 
@@ -51,9 +81,11 @@ CurrentUses | Current connections to this share
 
 <br/>
 
-#### Get-NetShare [-Name] \<string> [[-Server] \<string>] 
+#### Get-NetShare [-Name] \<string> [[-Server] \<string>] [[-Level] \<Int>]
 
 With this command you get detailed information about the specified share on the machine or from a remote server.
+
+If you do not have admin rights, use the option -Level 501 (Default is 502). Then the settings from the share flags are listed, Path, the permissions (ShareACLText, ShareSDDL, ShareACL), CurrentUses and ConcurrentUserLimit stay empty.
 
 The returned objects will have the following properties:
 
@@ -69,7 +101,9 @@ ShareACLText | Permissions on the share itself. Special format: Every permission
 CurrentUses | Current connections to this share
 ConcurrentUserLimit | Allowed connections to the share. Default is -1 that equals maximum
 EncryptData | Encryption feature of SMB3, can be Enabled or Disabled (default)
-Flags | Decimal value of the netapi32 1005 structure flags
+ContinuouslyAvailable | Continuous availability on a cluster share, can be Enabled or Disabled (read only)
+CompressData | SMB compression requested for the share, can be Enabled or Disabled (read only)
+Flags | Decimal value of the netapi32 1005 (or 501) structure flags
 Type | The type of the share
 ShareSDDL | The DACL of the share in SDDL format
 ShareACL | The ACL of the share in the standard powershell/.net ACL format. Try to look at the .ShareACL.Access
